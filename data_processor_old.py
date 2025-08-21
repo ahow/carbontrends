@@ -61,24 +61,17 @@ class DataProcessor:
     def _process_reference_sheet(self, df: pd.DataFrame) -> pd.DataFrame:
         """Process the Reference sheet containing company metadata."""
         try:
-            # Check for either 'Company' or 'Name' column
-            company_col = None
-            if 'Company' in df.columns:
-                company_col = 'Company'
-            elif 'Name' in df.columns:
-                company_col = 'Name'
-            else:
-                st.error("Reference sheet missing required column: Company or Name")
-                return pd.DataFrame()
-            
-            if 'ISIN' not in df.columns:
-                st.error("Reference sheet missing required column: ISIN")
-                return pd.DataFrame()
+            # Ensure required columns exist
+            required_cols = ['ISIN', 'Company']
+            for col in required_cols:
+                if col not in df.columns:
+                    st.error(f"Reference sheet missing required column: {col}")
+                    return pd.DataFrame()
             
             # Clean and standardize data
             df_clean = df.copy()
             df_clean['ISIN'] = df_clean['ISIN'].astype(str).str.strip()
-            df_clean['Company'] = df_clean[company_col].astype(str).str.strip()
+            df_clean['Company'] = df_clean['Company'].astype(str).str.strip()
             
             # Fill missing values for optional columns
             optional_cols = ['Sector', 'Subsector', 'Industry', 'Subindustry', 'Country']
@@ -89,13 +82,12 @@ class DataProcessor:
                     df_clean[col] = 'Unknown'
             
             # Remove rows with invalid ISIN or Company names
-            mask = (
-                (df_clean['ISIN'].astype(str) != 'nan') & 
-                (df_clean['Company'].astype(str) != 'nan') &
+            df_clean = df_clean[
+                (df_clean['ISIN'] != 'nan') & 
+                (df_clean['Company'] != 'nan') &
                 (df_clean['ISIN'].astype(str).str.len() > 0) &
                 (df_clean['Company'].astype(str).str.len() > 0)
-            )
-            df_clean = df_clean[mask].copy()
+            ].copy()
             
             return df_clean
             
@@ -134,14 +126,13 @@ class DataProcessor:
                 df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
             
             # Keep only ISIN and year columns
-            df_clean = df_clean[['ISIN'] + year_columns].copy()
+            df_clean = df_clean[['ISIN'] + year_columns]
             
             # Remove rows with invalid ISIN
-            mask = (
-                (df_clean['ISIN'].astype(str) != 'nan') & 
-                (df_clean['ISIN'].astype(str).str.len() > 0)
-            )
-            df_clean = df_clean[mask].copy()
+            df_clean = df_clean[
+                (df_clean['ISIN'] != 'nan') & 
+                (df_clean['ISIN'].str.len() > 0)
+            ]
             
             return df_clean
             
@@ -181,21 +172,20 @@ class DataProcessor:
             
             if not year_columns:
                 st.warning(f"No valid year columns found in {sheet_name} sheet")
-                return pd.DataFrame({'ISIN': []})
+                return pd.DataFrame(columns=['ISIN'])
             
             # Convert year columns to numeric
             for col in year_columns:
                 df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
             
             # Keep only ISIN and year columns
-            df_clean = df_clean[['ISIN'] + year_columns].copy()
+            df_clean = df_clean[['ISIN'] + year_columns]
             
             # Remove rows with invalid ISIN
-            mask = (
-                (df_clean['ISIN'].astype(str) != 'nan') & 
-                (df_clean['ISIN'].astype(str).str.len() > 0)
-            )
-            df_clean = df_clean[mask].copy()
+            df_clean = df_clean[
+                (df_clean['ISIN'] != 'nan') & 
+                (df_clean['ISIN'].str.len() > 0)
+            ]
             
             return df_clean
             
@@ -259,8 +249,7 @@ class DataProcessor:
                     year_cols = [col for col in data[sheet_name].columns if col != 'ISIN']
                     if year_cols:
                         total_cells = len(data[sheet_name]) * len(year_cols)
-                        non_null_counts = data[sheet_name][year_cols].count()
-                        non_null_cells = int(non_null_counts.sum())
+                        non_null_cells = data[sheet_name][year_cols].count().sum()
                         summary[f'{sheet_name}_completeness'] = non_null_cells / total_cells if total_cells > 0 else 0
                     else:
                         summary[f'{sheet_name}_completeness'] = 0

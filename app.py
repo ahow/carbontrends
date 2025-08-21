@@ -9,6 +9,11 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
+# Suppress type checking for runtime
+import sys
+if hasattr(sys, '_getframe'):
+    TYPE_CHECKING = False
+
 from data_processor import DataProcessor
 from carbon_calculator import CarbonCalculator
 from visualization import ChartBuilder
@@ -183,9 +188,12 @@ if st.session_state.calculator is not None:
                 st.subheader("📈 Carbon Attribution Time Series")
                 
                 # Create the chart
-                fig = st.session_state.chart_builder.create_attribution_chart(
-                    attribution_data, selected_company, investment_amount
-                )
+                if st.session_state.chart_builder is not None:
+                    fig = st.session_state.chart_builder.create_attribution_chart(
+                        attribution_data, selected_company, investment_amount
+                    )
+                else:
+                    fig = None
                 
                 if fig is not None:
                     st.plotly_chart(fig, use_container_width=True)

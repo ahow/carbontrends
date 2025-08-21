@@ -171,7 +171,7 @@ class CarbonCalculator:
                 if len(years) >= 2:
                     # Linear interpolation/extrapolation
                     ev_estimate = np.interp(target_year, years, values)
-                    return max(ev_estimate, 1000000)  # Minimum 1M enterprise value
+                    return max(float(ev_estimate), 1000000.0)  # Minimum 1M enterprise value
                 elif len(years) == 1:
                     # Use the single available value
                     return values[0]
@@ -199,7 +199,7 @@ class CarbonCalculator:
                 if len(years) >= 2:
                     # Linear interpolation/extrapolation
                     carbon_estimate = np.interp(target_year, years, values)
-                    return max(carbon_estimate, 0)
+                    return max(float(carbon_estimate), 0.0)
                 elif len(years) == 1:
                     # Use carbon intensity approach if sales data available
                     single_year = years[0]
@@ -246,7 +246,7 @@ class CarbonCalculator:
             )
             
             # Prepare annual data for interpolation (using mid-year dates)
-            annual_dates = [pd.Timestamp(year=row['year'], month=6, day=15) for _, row in annual_df.iterrows()]
+            annual_dates = [pd.Timestamp(year=int(row['year']), month=6, day=15) for _, row in annual_df.iterrows()]
             
             # Create interpolation functions
             monthly_data = []
@@ -273,10 +273,10 @@ class CarbonCalculator:
                 else:
                     # Interpolate/extrapolate for missing years
                     ownership_pct = self._interpolate_value(
-                        date, annual_dates, annual_df['ownership_percentage'].values
+                        date, annual_dates, annual_df['ownership_percentage'].to_numpy()
                     )
                     ev = self._interpolate_value(
-                        date, annual_dates, annual_df['enterprise_value'].values
+                        date, annual_dates, annual_df['enterprise_value'].to_numpy()
                     )
                     monthly_emissions = self._interpolate_smooth_emissions(
                         date, annual_df, annual_dates
@@ -310,7 +310,7 @@ class CarbonCalculator:
             # Convert dates to numeric for interpolation
             target_numeric = target_date.timestamp()
             dates_numeric = [d.timestamp() for d in annual_dates]
-            emissions_values = annual_df['annual_emissions_attributed'].values
+            emissions_values = annual_df['annual_emissions_attributed'].to_numpy()
             
             # Use cubic spline interpolation
             if len(dates_numeric) >= 4:
@@ -322,7 +322,7 @@ class CarbonCalculator:
                 interpolated_annual = np.interp(target_numeric, dates_numeric, emissions_values)
             
             # Convert to monthly equivalent
-            monthly_emissions = max(0, interpolated_annual / 12)
+            monthly_emissions = max(0.0, float(interpolated_annual) / 12.0)
             
             return monthly_emissions
             
@@ -344,7 +344,7 @@ class CarbonCalculator:
             # Linear interpolation
             interpolated_value = np.interp(target_numeric, dates_numeric, values)
             
-            return max(0, interpolated_value)
+            return max(0.0, float(interpolated_value))
             
         except Exception:
-            return np.mean(values) if len(values) > 0 else 0
+            return float(np.mean(values)) if len(values) > 0 else 0.0

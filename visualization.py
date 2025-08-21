@@ -164,21 +164,24 @@ class ChartBuilder:
             
             # Get one point per year (preferably from June/mid-year)
             annual_points = []
-            for year in filtered_data['year'].unique():
+            unique_years = filtered_data['year'].unique()
+            for year in unique_years:
                 year_data = filtered_data[filtered_data['year'] == year]
                 
                 # Prefer June data (month 6) or closest to mid-year
                 if len(year_data) > 1:
                     june_data = year_data[year_data['month'] == 6]
                     if not june_data.empty:
-                        annual_points.append(june_data.iloc[0])
+                        annual_points.append(june_data.iloc[0].to_dict())
                     else:
                         # Find closest to middle of year
-                        year_data['month_diff'] = abs(year_data['month'] - 6.5)
-                        closest = year_data.loc[year_data['month_diff'].idxmin()]
-                        annual_points.append(closest)
+                        year_data_copy = year_data.copy()
+                        year_data_copy['month_diff'] = abs(year_data_copy['month'] - 6.5)
+                        closest_idx = year_data_copy['month_diff'].idxmin()
+                        closest = year_data_copy.loc[closest_idx]
+                        annual_points.append(closest.to_dict())
                 else:
-                    annual_points.append(year_data.iloc[0])
+                    annual_points.append(year_data.iloc[0].to_dict())
             
             return pd.DataFrame(annual_points)
             
