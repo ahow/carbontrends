@@ -133,7 +133,7 @@ class ChartBuilder:
                 height=500
             )
             
-            # Add range selector
+            # Add range selector and slider
             fig.update_layout(
                 xaxis=dict(
                     rangeselector=dict(
@@ -142,9 +142,18 @@ class ChartBuilder:
                             dict(count=3, label="3Y", step="year", stepmode="backward"),
                             dict(count=5, label="5Y", step="year", stepmode="backward"),
                             dict(step="all", label="All")
-                        ])
+                        ]),
+                        bgcolor="rgba(240,240,240,0.8)",
+                        bordercolor="rgba(0,0,0,0.2)",
+                        borderwidth=1
                     ),
-                    rangeslider=dict(visible=True, thickness=0.05),
+                    rangeslider=dict(
+                        visible=True, 
+                        thickness=0.08,
+                        bgcolor="rgba(248,249,250,1)",
+                        bordercolor="rgba(0,0,0,0.1)",
+                        borderwidth=1
+                    ),
                     type="date"
                 )
             )
