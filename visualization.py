@@ -55,21 +55,16 @@ class ChartBuilder:
                 showlegend=True
             ))
             
-            # Add annual reported data points
+            # Add annual reported data points as step functions
             reported_data = self._get_annual_points(data_sorted, 'reported')
             if not reported_data.empty:
                 fig.add_trace(go.Scatter(
                     x=reported_data['date'],
                     y=reported_data['monthly_emissions_attributed'],
-                    mode='lines+markers',
+                    mode='lines',
                     name='Annual Reported Data (Steps)',
                     line=dict(color=self.color_palette['reported_data'], width=2, shape='hv'),
-                    marker=dict(
-                        color=self.color_palette['reported_data'],
-                        size=8,
-                        symbol='circle',
-                        line=dict(width=1, color='white')
-                    ),
+                    connectgaps=False,
                     hovertemplate='<b>%{x|%Y}</b><br>' +
                                 'Annual Data: %{y:.1f} tCO₂e/month<br>' +
                                 'Data Quality: Reported<br>' +
@@ -77,21 +72,16 @@ class ChartBuilder:
                     showlegend=True
                 ))
             
-            # Add annual estimated data points
+            # Add annual estimated data points as step functions
             estimated_data = self._get_annual_points(data_sorted, 'estimated')
             if not estimated_data.empty:
                 fig.add_trace(go.Scatter(
                     x=estimated_data['date'],
                     y=estimated_data['monthly_emissions_attributed'],
-                    mode='lines+markers',
+                    mode='lines',
                     name='Annual Estimated Data (Steps)',
                     line=dict(color=self.color_palette['estimated_data'], width=2, shape='hv', dash='dash'),
-                    marker=dict(
-                        color=self.color_palette['estimated_data'],
-                        size=6,
-                        symbol='triangle-up',
-                        line=dict(width=1, color='white')
-                    ),
+                    connectgaps=False,
                     hovertemplate='<b>%{x|%Y}</b><br>' +
                                 'Annual Data: %{y:.1f} tCO₂e/month<br>' +
                                 'Data Quality: Estimated<br>' +
@@ -165,7 +155,7 @@ class ChartBuilder:
             return None
     
     def _get_annual_points(self, data: pd.DataFrame, quality_filter: str) -> pd.DataFrame:
-        """Extract annual data points for specific quality level."""
+        """Extract annual data points for specific quality level, creating step functions."""
         try:
             # Filter by data quality
             filtered_data = data[data['data_quality'] == quality_filter].copy()
@@ -173,28 +163,57 @@ class ChartBuilder:
             if filtered_data.empty:
                 return pd.DataFrame()
             
-            # Get one point per year (preferably from June/mid-year)
-            annual_points = []
-            unique_years = filtered_data['year'].unique()
+            # Get unique years and their representative values
+            year_values = {}
+            unique_years = sorted(filtered_data['year'].unique())
+            
             for year in unique_years:
                 year_data = filtered_data[filtered_data['year'] == year]
-                
-                # Prefer June data (month 6) or closest to mid-year
-                if len(year_data) > 1:
-                    june_data = year_data[year_data['month'] == 6]
-                    if not june_data.empty:
-                        annual_points.append(june_data.iloc[0].to_dict())
-                    else:
-                        # Find closest to middle of year
-                        year_data_copy = year_data.copy()
-                        year_data_copy['month_diff'] = abs(year_data_copy['month'] - 6.5)
-                        closest_idx = year_data_copy['month_diff'].idxmin()
-                        closest = year_data_copy.loc[closest_idx]
-                        annual_points.append(closest.to_dict())
-                else:
-                    annual_points.append(year_data.iloc[0].to_dict())
+                # Use the average value across all months for this year
+                repr_value = year_data['monthly_emissions_attributed'].mean()
+                year_values[year] = repr_value
             
-            return pd.DataFrame(annual_points)
+            # Create step function points
+            step_points = []
+            
+            for i, year in enumerate(unique_years):
+                value = year_values[year]
+                
+                # Add points to create proper step function
+                # Start of year
+                step_points.append({
+                    'date': pd.Timestamp(year=year, month=1, day=1),
+                    'monthly_emissions_attributed': value,
+                    'year': year,
+                    'month': 1,
+                    'data_quality': quality_filter
+                })
+                
+                # End of year (just before next year)
+                step_points.append({
+                    'date': pd.Timestamp(year=year, month=12, day=31, hour=23, minute=59),
+                    'monthly_emissions_attributed': value,
+                    'year': year,
+                    'month': 12,
+                    'data_quality': quality_filter
+                })
+                
+                # Add gap if there's a next year to create proper step
+                if i < len(unique_years) - 1:
+                    next_year = unique_years[i + 1]
+                    next_value = year_values[next_year]
+                    
+                    # Add point at start of next year
+                    step_points.append({
+                        'date': pd.Timestamp(year=next_year, month=1, day=1),
+                        'monthly_emissions_attributed': next_value,
+                        'year': next_year,
+                        'month': 1,
+                        'data_quality': quality_filter
+                    })
+            
+            step_df = pd.DataFrame(step_points)
+            return step_df.sort_values('date').reset_index(drop=True)
             
         except Exception:
             return pd.DataFrame()
