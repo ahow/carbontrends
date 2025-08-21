@@ -251,6 +251,83 @@ class ChartBuilder:
             st.error(f"Error creating sector comparison chart: {str(e)}")
             return None
     
+    def create_portfolio_exposure_chart(self, exposure_data: pd.DataFrame) -> Optional[go.Figure]:
+        """Create a chart showing portfolio carbon exposure over time."""
+        try:
+            if exposure_data.empty:
+                return None
+            
+            # Prepare data for plotting
+            exposure_sorted = exposure_data.sort_values('period_start')
+            
+            # Create figure
+            fig = go.Figure()
+            
+            # Add portfolio exposure line
+            fig.add_trace(go.Scatter(
+                x=exposure_sorted['period_start'],
+                y=exposure_sorted['portfolio_carbon_change'],
+                mode='lines+markers',
+                name='Portfolio Carbon Exposure',
+                line=dict(color='#2E86AB', width=3),
+                marker=dict(
+                    color='#2E86AB',
+                    size=8,
+                    symbol='circle',
+                    line=dict(width=2, color='white')
+                ),
+                hovertemplate='<b>%{x}</b><br>' +
+                            'Carbon Exposure: %{y:.2f} tCO₂e<br>' +
+                            '<extra></extra>',
+                showlegend=True
+            ))
+            
+            # Add zero reference line
+            fig.add_hline(
+                y=0, 
+                line_dash="dash", 
+                line_color="gray", 
+                annotation_text="Neutral Exposure",
+                annotation_position="bottom right"
+            )
+            
+            # Update layout
+            fig.update_layout(
+                title="Portfolio Carbon Exposure Over Time",
+                xaxis_title="Period",
+                yaxis_title="Carbon Exposure Change (tCO₂e)",
+                template='plotly_white',
+                hovermode='x unified',
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                ),
+                height=400
+            )
+            
+            # Color-code positive/negative exposure
+            colors = ['#e74c3c' if val > 0 else '#27ae60' for val in exposure_sorted['portfolio_carbon_change']]
+            
+            # Add bar chart overlay for better visualization
+            fig.add_trace(go.Bar(
+                x=exposure_sorted['period_start'],
+                y=exposure_sorted['portfolio_carbon_change'],
+                name='Period Change',
+                marker_color=colors,
+                opacity=0.3,
+                showlegend=False,
+                hoverinfo='skip'
+            ))
+            
+            return fig
+            
+        except Exception as e:
+            st.error(f"Error creating portfolio exposure chart: {str(e)}")
+            return None
+    
     def create_data_quality_chart(self, data: pd.DataFrame) -> Optional[go.Figure]:
         """Create a chart showing data quality over time."""
         try:
