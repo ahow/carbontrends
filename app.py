@@ -27,13 +27,9 @@ st.set_page_config(
 )
 
 # Title and description
-st.title("🌱 Carbon Attribution Dashboard")
-st.markdown("""
-**Analyze carbon emissions attributable to $1M investments across companies**
-
-This dashboard calculates the carbon footprint attributable to a $1M investment in each company,
-providing smooth temporal trends and data quality transparency.
-""")
+st.title("Carbon Attribution Dashboard")
+st.markdown("Track carbon emissions attributable to $1M investments over time")
+st.markdown("---")
 
 # Initialize session state
 if 'data_processor' not in st.session_state:
@@ -44,7 +40,7 @@ if 'chart_builder' not in st.session_state:
     st.session_state.chart_builder = None
 
 # Sidebar - File Upload
-st.sidebar.header("📊 Data Upload")
+st.sidebar.header("Data Upload")
 uploaded_file = st.sidebar.file_uploader(
     "Upload Excel file with company data",
     type=['xlsx', 'xls'],
@@ -102,21 +98,25 @@ if st.session_state.calculator is not None:
     col1, col2 = st.columns([3, 1])
     
     with col1:
+        st.subheader("Company Selection")
         selected_company = st.selectbox(
-            "🏢 Select Company",
+            "Select Company",
             companies,
-            help="Choose a company to analyze carbon attribution"
+            help="Choose a company to analyze carbon attribution",
+            label_visibility="collapsed"
         )
     
     with col2:
+        st.subheader("Investment Amount")
         investment_amount = st.number_input(
-            "💰 Investment Amount ($)",
+            "Investment Amount ($)",
             min_value=100000,
             max_value=100000000,
             value=1000000,
             step=100000,
             format="%d",
-            help="Investment amount in USD"
+            help="Investment amount in USD",
+            label_visibility="collapsed"
         )
     
     if selected_company:
@@ -124,19 +124,39 @@ if st.session_state.calculator is not None:
             # Get company information
             company_info = st.session_state.calculator.get_company_info(selected_company)
             
-            # Display company information
-            st.subheader(f"📋 Company Profile: {selected_company}")
-            
+            # Display company information in cards
+            st.markdown("")
             info_cols = st.columns(4)
             with info_cols[0]:
-                st.metric("Sector", company_info.get('sector', 'N/A'))
+                st.markdown(f"""
+                <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #007bff;">
+                    <h4 style="margin: 0; color: #6c757d; font-size: 0.875rem;">Sector</h4>
+                    <p style="margin: 0; font-size: 1.25rem; font-weight: bold; color: #212529;">{company_info.get('sector', 'N/A')}</p>
+                </div>
+                """, unsafe_allow_html=True)
             with info_cols[1]:
-                st.metric("Industry", company_info.get('industry', 'N/A'))
+                st.markdown(f"""
+                <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #28a745;">
+                    <h4 style="margin: 0; color: #6c757d; font-size: 0.875rem;">Industry</h4>
+                    <p style="margin: 0; font-size: 1.25rem; font-weight: bold; color: #212529;">{company_info.get('industry', 'N/A')}</p>
+                </div>
+                """, unsafe_allow_html=True)
             with info_cols[2]:
-                st.metric("Country", company_info.get('country', 'N/A'))
+                st.markdown(f"""
+                <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #ffc107;">
+                    <h4 style="margin: 0; color: #6c757d; font-size: 0.875rem;">Country</h4>
+                    <p style="margin: 0; font-size: 1.25rem; font-weight: bold; color: #212529;">{company_info.get('country', 'N/A')}</p>
+                </div>
+                """, unsafe_allow_html=True)
             with info_cols[3]:
                 isin = company_info.get('isin', 'N/A')
-                st.metric("ISIN", isin[:12] + "..." if len(isin) > 12 else isin)
+                isin_display = isin[:12] + "..." if len(isin) > 12 else isin
+                st.markdown(f"""
+                <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #dc3545;">
+                    <h4 style="margin: 0; color: #6c757d; font-size: 0.875rem;">ISIN</h4>
+                    <p style="margin: 0; font-size: 1.25rem; font-weight: bold; color: #212529;">{isin_display}</p>
+                </div>
+                """, unsafe_allow_html=True)
             
             # Calculate carbon attribution
             attribution_data = st.session_state.calculator.calculate_attribution(
@@ -144,48 +164,58 @@ if st.session_state.calculator is not None:
             )
             
             if attribution_data is not None and not attribution_data.empty:
-                # Current metrics
-                st.subheader("📊 Current Metrics (2025)")
-                
+                # Current metrics with large cards
+                st.markdown("")
                 current_data = attribution_data[attribution_data['year'] == 2025].iloc[0] if len(attribution_data[attribution_data['year'] == 2025]) > 0 else None
                 
                 if current_data is not None:
                     metric_cols = st.columns(4)
                     
+                    monthly_emissions = current_data['monthly_emissions_attributed']
+                    annual_emissions = monthly_emissions * 12
+                    reported_data_pct = (attribution_data['data_quality'] == 'reported').mean() * 100
+                    confidence_score = min(100, reported_data_pct + 20)
+                    
                     with metric_cols[0]:
-                        ownership_pct = current_data['ownership_percentage'] * 100
-                        st.metric(
-                            "Ownership Share",
-                            f"{ownership_pct:.3f}%",
-                            help="Percentage of company owned by $1M investment"
-                        )
+                        st.markdown(f"""
+                        <div style="background-color: #e8f5e8; padding: 2rem; border-radius: 0.75rem; text-align: center; border: 1px solid #d4edda;">
+                            <h3 style="margin: 0; color: #155724; font-size: 2.5rem; font-weight: bold;">{monthly_emissions:.1f}</h3>
+                            <p style="margin: 0.5rem 0 0 0; color: #155724; font-size: 1rem;">tonnes CO2e per month</p>
+                            <p style="margin: 0; color: #6c757d; font-size: 0.875rem;">Monthly Attribution</p>
+                        </div>
+                        """, unsafe_allow_html=True)
                     
                     with metric_cols[1]:
-                        enterprise_value = current_data['enterprise_value'] / 1e6
-                        st.metric(
-                            "Enterprise Value",
-                            f"${enterprise_value:.1f}M",
-                            help="Current enterprise value in millions USD"
-                        )
+                        st.markdown(f"""
+                        <div style="background-color: #e3f2fd; padding: 2rem; border-radius: 0.75rem; text-align: center; border: 1px solid #bbdefb;">
+                            <h3 style="margin: 0; color: #0d47a1; font-size: 2.5rem; font-weight: bold;">{annual_emissions:.0f}</h3>
+                            <p style="margin: 0.5rem 0 0 0; color: #0d47a1; font-size: 1rem;">tonnes CO2e per year</p>
+                            <p style="margin: 0; color: #6c757d; font-size: 0.875rem;">Annual Attribution</p>
+                        </div>
+                        """, unsafe_allow_html=True)
                     
                     with metric_cols[2]:
-                        monthly_emissions = current_data['monthly_emissions_attributed']
-                        st.metric(
-                            "Monthly Attribution",
-                            f"{monthly_emissions:.1f} tCO₂e",
-                            help="Monthly carbon emissions attributed to investment"
-                        )
+                        st.markdown(f"""
+                        <div style="background-color: #fff3e0; padding: 2rem; border-radius: 0.75rem; text-align: center; border: 1px solid #ffcc02;">
+                            <h3 style="margin: 0; color: #e65100; font-size: 2.5rem; font-weight: bold;">{reported_data_pct:.0f}%</h3>
+                            <p style="margin: 0.5rem 0 0 0; color: #e65100; font-size: 1rem;">reported vs estimated</p>
+                            <p style="margin: 0; color: #6c757d; font-size: 0.875rem;">Data Quality</p>
+                        </div>
+                        """, unsafe_allow_html=True)
                     
                     with metric_cols[3]:
-                        annual_emissions = monthly_emissions * 12
-                        st.metric(
-                            "Annual Attribution",
-                            f"{annual_emissions:.0f} tCO₂e",
-                            help="Annual carbon emissions attributed to investment"
-                        )
+                        st.markdown(f"""
+                        <div style="background-color: #f3e5f5; padding: 2rem; border-radius: 0.75rem; text-align: center; border: 1px solid #ce93d8;">
+                            <h3 style="margin: 0; color: #4a148c; font-size: 2.5rem; font-weight: bold;">{confidence_score:.0f}%</h3>
+                            <p style="margin: 0.5rem 0 0 0; color: #4a148c; font-size: 1rem;">estimation confidence</p>
+                            <p style="margin: 0; color: #6c757d; font-size: 0.875rem;">Confidence</p>
+                        </div>
+                        """, unsafe_allow_html=True)
                 
                 # Time series visualization
-                st.subheader("📈 Carbon Attribution Time Series")
+                st.markdown("")
+                st.subheader("Carbon Attribution Over Time")
+                st.markdown("Monthly carbon emissions attributable to $1M investment (smoothed trend)")
                 
                 # Create the chart
                 if st.session_state.chart_builder is not None:
@@ -198,51 +228,49 @@ if st.session_state.calculator is not None:
                 if fig is not None:
                     st.plotly_chart(fig, use_container_width=True)
                 
-                # Data quality information
-                st.subheader("🔍 Data Quality Assessment")
+                # Monthly data details section
+                st.markdown("")
+                st.subheader("Monthly Data Details")
+                st.markdown("Detailed monthly carbon attribution calculations")
                 
-                quality_cols = st.columns(2)
+                # Enhanced monthly data table
+                display_data = attribution_data.copy()
+                display_data['date'] = pd.to_datetime(display_data[['year', 'month']].assign(day=1))
+                display_data = display_data.sort_values('date', ascending=False)  # Show latest first
                 
-                with quality_cols[0]:
-                    # Calculate confidence score
-                    reported_data_pct = (attribution_data['data_quality'] == 'reported').mean() * 100
-                    confidence_score = min(100, reported_data_pct + 20)  # Base confidence + reporting bonus
-                    
-                    st.metric(
-                        "Confidence Score",
-                        f"{confidence_score:.1f}%",
-                        help="Overall confidence in the carbon attribution calculations"
-                    )
+                # Show last 24 months by default
+                recent_data = display_data.head(24)
                 
-                with quality_cols[1]:
-                    estimated_points = (attribution_data['data_quality'] == 'estimated').sum()
-                    total_points = len(attribution_data)
+                # Format data for display
+                table_data = []
+                for _, row in recent_data.iterrows():
+                    month_str = row['date'].strftime('%Y-%m')
+                    ev_formatted = f"${row['enterprise_value']/1e6:.1f}M" if row['enterprise_value'] > 0 else "N/A"
+                    ownership_pct = f"{row['ownership_percentage']*100:.4f}%"
+                    attribution = f"{row['monthly_emissions_attributed']:.2f}"
+                    confidence = f"{confidence_score:.0f}%"
+                    status = row['data_quality'].title()
+                    method = "Temporal Extrapolation / Reported" if row['data_quality'] == 'estimated' else "Reported Data"
                     
-                    st.metric(
-                        "Estimated Data Points",
-                        f"{estimated_points}/{total_points}",
-                        help="Number of data points that are estimated vs total"
-                    )
+                    table_data.append({
+                        'Month': month_str,
+                        'Enterprise Value ($)': ev_formatted,
+                        'Ownership Share': ownership_pct,
+                        'Attribution (tonnes CO2e)': attribution,
+                        'Confidence': confidence,
+                        'Status': status,
+                        'Estimation Method': method
+                    })
                 
-                # Detailed monthly data table
-                with st.expander("📋 Detailed Monthly Data"):
-                    # Prepare data for display
-                    display_data = attribution_data.copy()
-                    display_data['date'] = pd.to_datetime(display_data[['year', 'month']].assign(day=1))
-                    display_data = display_data.sort_values('date')
-                    
-                    # Format columns for display
-                    formatted_data = display_data[['date', 'monthly_emissions_attributed', 'ownership_percentage', 'data_quality', 'enterprise_value']].copy()
-                    formatted_data.columns = ['Date', 'Monthly Attribution (tCO₂e)', 'Ownership %', 'Data Quality', 'Enterprise Value ($M)']
-                    formatted_data['Ownership %'] = (formatted_data['Ownership %'] * 100).round(4)
-                    formatted_data['Enterprise Value ($M)'] = (formatted_data['Enterprise Value ($M)'] / 1e6).round(1)
-                    formatted_data['Monthly Attribution (tCO₂e)'] = formatted_data['Monthly Attribution (tCO₂e)'].round(2)
-                    
-                    st.dataframe(
-                        formatted_data,
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                # Display table
+                table_df = pd.DataFrame(table_data)
+                st.dataframe(
+                    table_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                st.markdown(f"Showing last 24 months of {len(attribution_data)} total data points")
                 
                 # Download data
                 st.subheader("💾 Export Data")
@@ -291,8 +319,13 @@ else:
 
 # Footer
 st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #666666; font-size: 0.9em;'>
-🌱 Carbon Attribution Dashboard | Built with Streamlit & Plotly
-</div>
-""", unsafe_allow_html=True)
+try:
+    if st.session_state.calculator is not None and hasattr(st.session_state.calculator, 'reference_df'):
+        total_companies = len(st.session_state.calculator.reference_df)
+    else:
+        total_companies = 0
+except:
+    total_companies = 0
+
+current_date = datetime.now().strftime("%-m/%-d/%Y")
+st.markdown(f"Data processed from {total_companies} companies • Last updated: {current_date}")

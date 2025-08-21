@@ -47,7 +47,7 @@ class ChartBuilder:
                 x=data_sorted['date'],
                 y=data_sorted['monthly_emissions_attributed'],
                 mode='lines',
-                name='Monthly Attribution Trend',
+                name='Monthly Smooth Trend',
                 line=dict(color=self.color_palette['smooth_trend'], width=3),
                 hovertemplate='<b>%{x}</b><br>' +
                             'Monthly Attribution: %{y:.1f} tCO₂e<br>' +
@@ -61,13 +61,14 @@ class ChartBuilder:
                 fig.add_trace(go.Scatter(
                     x=reported_data['date'],
                     y=reported_data['monthly_emissions_attributed'],
-                    mode='markers',
-                    name='Annual Reported Data',
+                    mode='lines+markers',
+                    name='Annual Reported Data (Steps)',
+                    line=dict(color=self.color_palette['reported_data'], width=2, shape='hv'),
                     marker=dict(
                         color=self.color_palette['reported_data'],
-                        size=10,
+                        size=8,
                         symbol='circle',
-                        line=dict(width=2, color='white')
+                        line=dict(width=1, color='white')
                     ),
                     hovertemplate='<b>%{x|%Y}</b><br>' +
                                 'Annual Data: %{y:.1f} tCO₂e/month<br>' +
@@ -82,13 +83,14 @@ class ChartBuilder:
                 fig.add_trace(go.Scatter(
                     x=estimated_data['date'],
                     y=estimated_data['monthly_emissions_attributed'],
-                    mode='markers',
-                    name='Annual Estimated Data',
+                    mode='lines+markers',
+                    name='Annual Estimated Data (Steps)',
+                    line=dict(color=self.color_palette['estimated_data'], width=2, shape='hv', dash='dash'),
                     marker=dict(
                         color=self.color_palette['estimated_data'],
-                        size=8,
+                        size=6,
                         symbol='triangle-up',
-                        line=dict(width=2, color='white')
+                        line=dict(width=1, color='white')
                     ),
                     hovertemplate='<b>%{x|%Y}</b><br>' +
                                 'Annual Data: %{y:.1f} tCO₂e/month<br>' +
