@@ -1,0 +1,13 @@
+This is a placeholder file. In a real implementation, this would contain sample Excel data with the following sheets:
+
+1. Reference sheet with columns: ISIN, Company, Sector, Subsector, Industry, Subindustry, Country
+2. Carbon sheet with columns: ISIN, 2019, 2020, 2021, 2022, 2023, 2024, 2025
+3. Sales sheet with columns: ISIN, 2019, 2020, 2021, 2022, 2023, 2024, 2025  
+4. EV sheet with columns: ISIN, 2019, 2020, 2021, 2022, 2023, 2024, 2025
+
+Sample companies would include:
+- 3M Company (Industrial sector)
+- 1&1 AG (Telecommunications)
+- Various companies across different sectors
+
+This file cannot be generated as binary content, but would contain structured data matching the expected format for the carbon attribution calculations.
