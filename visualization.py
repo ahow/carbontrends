@@ -72,8 +72,8 @@ class ChartBuilder:
                     showlegend=True
                 ))
             
-            # Add annual estimated data points as step functions
-            estimated_data = self._get_annual_points(data_sorted, 'estimated')
+            # Add annual estimated data points as step functions (only for years without reported data)
+            estimated_data = self._get_estimated_only_points(data_sorted)
             if not estimated_data.empty:
                 fig.add_trace(go.Scatter(
                     x=estimated_data['date'],
@@ -214,6 +214,71 @@ class ChartBuilder:
             
         except Exception as e:
             print(f"Error creating step function for {quality_filter}: {e}")
+            return pd.DataFrame()
+    
+    def _get_estimated_only_points(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Extract estimated data points only for years that don't have reported data."""
+        try:
+            # Get years that have reported data
+            reported_years = set(data[data['data_quality'] == 'reported']['year'].unique())
+            
+            # Get estimated data only for years without reported data
+            estimated_data = data[data['data_quality'] == 'estimated'].copy()
+            estimated_only = estimated_data[~estimated_data['year'].isin(reported_years)]
+            
+            if estimated_only.empty:
+                return pd.DataFrame()
+            
+            # Get unique years and their representative values (use January value)
+            year_values = {}
+            unique_years = sorted(estimated_only['year'].unique())
+            
+            for year in unique_years:
+                # Get January data for this year as representative
+                jan_data = estimated_only[(estimated_only['year'] == year) & (estimated_only['month'] == 1)]
+                if not jan_data.empty:
+                    year_values[year] = jan_data['monthly_emissions_attributed'].iloc[0]
+                else:
+                    # Fallback to any month if January not available
+                    year_data = estimated_only[estimated_only['year'] == year]
+                    year_values[year] = year_data['monthly_emissions_attributed'].iloc[0]
+            
+            if not year_values:
+                return pd.DataFrame()
+            
+            # Debug: Print values for troubleshooting
+            print(f"DEBUG: Estimated-only step values for chart (excluding reported years {sorted(reported_years)}): {year_values}")
+            
+            # Create step function points
+            step_points = []
+            sorted_years = sorted(year_values.keys())
+            
+            for year in sorted_years:
+                value = year_values[year]
+                
+                # Add year start point
+                step_points.append({
+                    'date': pd.Timestamp(year=year, month=1, day=1),
+                    'monthly_emissions_attributed': value,
+                    'year': year,
+                    'month': 1,
+                    'data_quality': 'estimated'
+                })
+                
+                # Add year end point
+                step_points.append({
+                    'date': pd.Timestamp(year=year, month=12, day=31),
+                    'monthly_emissions_attributed': value,
+                    'year': year,
+                    'month': 12,
+                    'data_quality': 'estimated'
+                })
+            
+            step_df = pd.DataFrame(step_points)
+            return step_df.sort_values('date').reset_index(drop=True)
+            
+        except Exception as e:
+            print(f"Error creating estimated-only step function: {e}")
             return pd.DataFrame()
     
     def create_sector_comparison_chart(self, data: List[Dict[str, Any]]) -> Optional[go.Figure]:
