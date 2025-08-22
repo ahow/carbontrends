@@ -127,6 +127,32 @@ class CarbonCalculator:
             annual_df['ownership_percentage'] = investment_amount / annual_df['enterprise_value']
             annual_df['annual_emissions_attributed'] = annual_df['ownership_percentage'] * annual_df['carbon_emissions']
             
+            # Detect and smooth extreme outliers to prevent interpolation spikes
+            if len(annual_df) >= 3:
+                emissions = annual_df['annual_emissions_attributed'].values
+                median_emission = np.median(emissions)
+                mad = np.median(np.abs(emissions - median_emission))  # Median Absolute Deviation
+                
+                # Flag values that are more than 5 MADs from median as extreme outliers
+                threshold = 5 * mad if mad > 0 else median_emission
+                outlier_mask = np.abs(emissions - median_emission) > threshold
+                
+                if outlier_mask.any() and threshold > 0:
+                    # Replace extreme outliers with capped values
+                    for i, is_outlier in enumerate(outlier_mask):
+                        if is_outlier:
+                            # Cap outlier to median ± 3*MAD for smoother interpolation
+                            max_allowed = median_emission + 3 * mad
+                            min_allowed = max(0, median_emission - 3 * mad)
+                            
+                            original_value = emissions[i]
+                            capped_value = np.clip(original_value, min_allowed, max_allowed)
+                            annual_df.loc[i, 'annual_emissions_attributed'] = capped_value
+                            
+                            # Mark as estimated if we modified it
+                            if abs(original_value - capped_value) / original_value > 0.1:  # >10% change
+                                annual_df.loc[i, 'data_quality'] = 'estimated'
+            
             # Generate smooth monthly data
             monthly_data = self._generate_monthly_smooth_data(annual_df)
             
