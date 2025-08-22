@@ -355,7 +355,7 @@ class ChartBuilder:
                     line=dict(width=2, color='white')
                 ),
                 hovertemplate='<b>%{x}</b><br>' +
-                            'Carbon Exposure: %{y:.2f} tCO₂e<br>' +
+                            'Carbon Exposure: %{y:.2f} tCO₂e per $1M portfolio<br>' +
                             '<extra></extra>',
                 showlegend=True
             ))
@@ -373,7 +373,7 @@ class ChartBuilder:
             fig.update_layout(
                 title="Portfolio Carbon Exposure Over Time",
                 xaxis_title="Period",
-                yaxis_title="Carbon Exposure Change (tCO₂e)",
+                yaxis_title="Carbon Exposure Change per $1M Portfolio Investment (tCO₂e)",
                 template='plotly_white',
                 hovermode='x unified',
                 legend=dict(

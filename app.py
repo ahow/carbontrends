@@ -606,7 +606,7 @@ with tab4:
                             st.markdown(f"""
                             <div style="background-color: #e3f2fd; padding: 2rem; border-radius: 0.75rem; text-align: center; border: 1px solid #bbdefb;">
                                 <h3 style="margin: 0; color: #0d47a1; font-size: 2rem; font-weight: bold;">{avg_change:.1f}</h3>
-                                <p style="margin: 0.5rem 0 0 0; color: #0d47a1; font-size: 1rem;">tCO2e per period</p>
+                                <p style="margin: 0.5rem 0 0 0; color: #0d47a1; font-size: 1rem;">tCO2e per $1M portfolio</p>
                                 <p style="margin: 0; color: #6c757d; font-size: 0.875rem;">Avg Change</p>
                             </div>
                             """, unsafe_allow_html=True)
@@ -616,7 +616,7 @@ with tab4:
                             st.markdown(f"""
                             <div style="background-color: #fff3e0; padding: 2rem; border-radius: 0.75rem; text-align: center; border: 1px solid #ffcc02;">
                                 <h3 style="margin: 0; color: #e65100; font-size: 2rem; font-weight: bold;">{max_exposure:.1f}</h3>
-                                <p style="margin: 0.5rem 0 0 0; color: #e65100; font-size: 1rem;">tCO2e maximum</p>
+                                <p style="margin: 0.5rem 0 0 0; color: #e65100; font-size: 1rem;">tCO2e per $1M portfolio</p>
                                 <p style="margin: 0; color: #6c757d; font-size: 0.875rem;">Peak Exposure</p>
                             </div>
                             """, unsafe_allow_html=True)
@@ -626,7 +626,7 @@ with tab4:
                             st.markdown(f"""
                             <div style="background-color: #f3e5f5; padding: 2rem; border-radius: 0.75rem; text-align: center; border: 1px solid #ce93d8;">
                                 <h3 style="margin: 0; color: #4a148c; font-size: 2rem; font-weight: bold;">{volatility:.1f}</h3>
-                                <p style="margin: 0.5rem 0 0 0; color: #4a148c; font-size: 1rem;">tCO2e volatility</p>
+                                <p style="margin: 0.5rem 0 0 0; color: #4a148c; font-size: 1rem;">tCO2e per $1M portfolio</p>
                                 <p style="margin: 0; color: #6c757d; font-size: 0.875rem;">Exposure Risk</p>
                             </div>
                             """, unsafe_allow_html=True)
@@ -649,7 +649,7 @@ with tab4:
                     display_columns = ['period_start', 'period_end', 'portfolio_carbon_change', 
                                      'num_holdings', 'period_months']
                     display_data = exposure_analysis[display_columns].copy()
-                    display_data.columns = ['Period Start', 'Period End', 'Carbon Change (tCO2e)', 
+                    display_data.columns = ['Period Start', 'Period End', 'Carbon Change (tCO2e per $1M portfolio)', 
                                           'Holdings Count', 'Period Length (months)']
                     
                     st.dataframe(display_data, use_container_width=True, hide_index=True)
