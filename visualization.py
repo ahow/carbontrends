@@ -183,6 +183,8 @@ class ChartBuilder:
             # Debug: Print values for troubleshooting
             if quality_filter == 'estimated':
                 print(f"DEBUG: Estimated step values for chart: {year_values}")
+            elif quality_filter == 'reported':
+                print(f"DEBUG: Reported step values for chart: {year_values}")
             
             # Create step function points - only connect consecutive years
             step_points = []
@@ -248,6 +250,7 @@ class ChartBuilder:
             
             # Debug: Print values for troubleshooting
             print(f"DEBUG: Estimated-only step values for chart (excluding reported years {sorted(reported_years)}): {year_values}")
+            print(f"DEBUG: Estimated-only years being plotted: {sorted(year_values.keys())}")
             
             # Create step function points
             step_points = []
