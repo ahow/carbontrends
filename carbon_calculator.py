@@ -79,39 +79,102 @@ class CarbonCalculator:
                 st.warning(f"No data found for {company_name}")
                 return None
             
-            # Create annual data points
+            # Create annual data points with carbon intensity-based outlier removal
             annual_data = []
+            
+            # First pass: collect all available data with carbon intensity
+            intensity_data = {}
             for year in sorted(all_years):
                 year_int = int(year)
-                
-                # Get data for this year
                 carbon_annual = carbon_data.get(year)
                 sales_annual = sales_data.get(year)
                 ev_annual = ev_data.get(year)
                 
-                # Estimate missing data
-                if ev_annual is None:
-                    ev_annual = self._estimate_enterprise_value(year_int, ev_data, sales_data, sales_annual)
+                # Calculate carbon intensity where we have both carbon and sales data
+                if carbon_annual is not None and sales_annual is not None and sales_annual > 0:
+                    carbon_intensity = carbon_annual / sales_annual  # tCO2e per USD
+                    intensity_data[year_int] = {
+                        'carbon': carbon_annual,
+                        'sales': sales_annual,
+                        'ev': ev_annual,
+                        'intensity': carbon_intensity,
+                        'has_carbon': True,
+                        'has_sales': True,
+                        'has_ev': ev_annual is not None
+                    }
+                else:
+                    # Store partial data for later estimation
+                    intensity_data[year_int] = {
+                        'carbon': carbon_annual,
+                        'sales': sales_annual,
+                        'ev': ev_annual,
+                        'intensity': None,
+                        'has_carbon': carbon_annual is not None,
+                        'has_sales': sales_annual is not None and sales_annual > 0,
+                        'has_ev': ev_annual is not None
+                    }
+            
+            # Second pass: identify and remove carbon intensity outliers
+            valid_intensities = []
+            valid_years = []
+            for year_int, data in intensity_data.items():
+                if data['intensity'] is not None:
+                    valid_intensities.append(data['intensity'])
+                    valid_years.append(year_int)
+            
+            if len(valid_intensities) >= 3:
+                # Remove outliers using carbon intensity
+                intensities_array = np.array(valid_intensities)
+                median_intensity = np.median(intensities_array)
+                mad_intensity = np.median(np.abs(intensities_array - median_intensity))
                 
-                if carbon_annual is None:
-                    carbon_annual = self._estimate_carbon_emissions(year_int, carbon_data, sales_data, sales_annual)
+                # Flag carbon intensity outliers (>3 MADs from median)
+                intensity_threshold = 3 * mad_intensity if mad_intensity > 0 else median_intensity * 0.1
+                outlier_mask = np.abs(intensities_array - median_intensity) > intensity_threshold
                 
-                # Skip if we still don't have essential data
-                if ev_annual is None or ev_annual <= 0:
+                # Also flag multiplicative outliers (>5x median intensity)
+                multiplicative_outlier_mask = intensities_array > (median_intensity * 5)
+                outlier_mask = outlier_mask | multiplicative_outlier_mask
+                
+                # Remove outlier years from consideration
+                for i, year_int in enumerate(valid_years):
+                    if outlier_mask[i]:
+                        intensity_data[year_int]['intensity'] = None  # Mark as invalid
+                        intensity_data[year_int]['is_outlier'] = True
+                        original_intensity = valid_intensities[i]
+                        print(f"Carbon intensity outlier removed for {company_name} year {year_int}: {original_intensity:.6f} tCO2e/USD")
+            
+            # Third pass: estimate missing carbon intensities using temporal interpolation
+            self._estimate_missing_intensities(intensity_data, company_name)
+            
+            # Fourth pass: create final annual data using corrected intensities
+            for year_int in sorted(intensity_data.keys()):
+                data = intensity_data[year_int]
+                
+                # Estimate missing EV if needed
+                if not data['has_ev']:
+                    data['ev'] = self._estimate_enterprise_value(year_int, ev_data, sales_data, data['sales'])
+                
+                # Skip if we don't have essential data
+                if data['ev'] is None or data['ev'] <= 0:
+                    continue
+                if data['sales'] is None or data['sales'] <= 0:
+                    continue
+                if data['intensity'] is None:
                     continue
                 
-                if carbon_annual is None or carbon_annual <= 0:
-                    continue
+                # Calculate final carbon emissions from intensity and sales
+                final_carbon = data['intensity'] * data['sales']
                 
                 # Determine data quality
                 data_quality = 'reported'
-                if carbon_data.get(year) is None or ev_data.get(year) is None:
+                if not data['has_carbon'] or not data['has_ev'] or data.get('is_outlier', False):
                     data_quality = 'estimated'
                 
                 annual_data.append({
                     'year': year_int,
-                    'carbon_emissions': carbon_annual,
-                    'enterprise_value': ev_annual,
+                    'carbon_emissions': final_carbon,
+                    'enterprise_value': data['ev'],
                     'data_quality': data_quality
                 })
             
@@ -127,49 +190,8 @@ class CarbonCalculator:
             annual_df['ownership_percentage'] = investment_amount / annual_df['enterprise_value']
             annual_df['annual_emissions_attributed'] = annual_df['ownership_percentage'] * annual_df['carbon_emissions']
             
-            # Detect and smooth extreme outliers to prevent interpolation spikes
-            if len(annual_df) >= 3:
-                emissions = annual_df['annual_emissions_attributed'].values
-                median_emission = np.median(emissions)
-                mad = np.median(np.abs(emissions - median_emission))  # Median Absolute Deviation
-                
-                # More aggressive outlier detection: flag values >3 MADs from median
-                threshold = 3 * mad if mad > 0 else median_emission * 0.1
-                outlier_mask = np.abs(emissions - median_emission) > threshold
-                
-                # Also check for multiplicative outliers (>10x median)
-                multiplicative_outliers = emissions > (median_emission * 10)
-                outlier_mask = outlier_mask | multiplicative_outliers
-                
-                if outlier_mask.any():
-                    # Replace extreme outliers with more conservative values
-                    for i, is_outlier in enumerate(outlier_mask):
-                        if is_outlier:
-                            original_value = emissions[i]
-                            
-                            # For extreme outliers (>10x median), use interpolation from neighbors
-                            if original_value > median_emission * 10:
-                                # Use median or interpolate from neighbors
-                                neighbor_values = []
-                                if i > 0:
-                                    neighbor_values.append(emissions[i-1])
-                                if i < len(emissions) - 1:
-                                    neighbor_values.append(emissions[i+1])
-                                
-                                if neighbor_values:
-                                    capped_value = np.mean(neighbor_values)
-                                else:
-                                    capped_value = median_emission
-                            else:
-                                # Cap to median ± 2*MAD for moderate outliers
-                                max_allowed = median_emission + 2 * mad
-                                min_allowed = max(0, median_emission - 2 * mad)
-                                capped_value = np.clip(original_value, min_allowed, max_allowed)
-                            
-                            annual_df.loc[i, 'annual_emissions_attributed'] = capped_value
-                            annual_df.loc[i, 'data_quality'] = 'estimated'
-                            
-                            print(f"Outlier corrected for {company_name} year {annual_df.loc[i, 'year']}: {original_value:.0f} → {capped_value:.0f} tCO2e")
+            # Carbon intensity-based outlier removal has already been applied above
+            # No additional outlier smoothing needed here
             
             # Generate smooth monthly data
             monthly_data = self._generate_monthly_smooth_data(annual_df)
@@ -439,3 +461,49 @@ class CarbonCalculator:
             
         except Exception:
             return float(np.mean(values)) if len(values) > 0 else 0.0
+    
+    def _estimate_missing_intensities(self, intensity_data: Dict, company_name: str) -> None:
+        """Estimate missing carbon intensities using temporal interpolation."""
+        try:
+            # Get valid intensities for interpolation
+            valid_years = []
+            valid_intensities = []
+            
+            for year_int in sorted(intensity_data.keys()):
+                data = intensity_data[year_int]
+                if data['intensity'] is not None and not data.get('is_outlier', False):
+                    valid_years.append(year_int)
+                    valid_intensities.append(data['intensity'])
+            
+            if len(valid_intensities) < 2:
+                # Not enough data for interpolation, use median or default
+                if len(valid_intensities) == 1:
+                    default_intensity = valid_intensities[0]
+                else:
+                    # Use industry default: 0.1 tCO2e per $1000 sales
+                    default_intensity = 0.0001
+                
+                for year_int, data in intensity_data.items():
+                    if data['intensity'] is None and data['sales'] is not None:
+                        intensity_data[year_int]['intensity'] = default_intensity
+                        print(f"Used default carbon intensity for {company_name} year {year_int}: {default_intensity:.6f} tCO2e/USD")
+                return
+            
+            # Interpolate/extrapolate missing intensities
+            valid_years_array = np.array(valid_years)
+            valid_intensities_array = np.array(valid_intensities)
+            
+            for year_int, data in intensity_data.items():
+                if data['intensity'] is None and data['sales'] is not None:
+                    # Linear interpolation/extrapolation
+                    estimated_intensity = np.interp(year_int, valid_years_array, valid_intensities_array)
+                    intensity_data[year_int]['intensity'] = estimated_intensity
+                    print(f"Estimated carbon intensity for {company_name} year {year_int}: {estimated_intensity:.6f} tCO2e/USD")
+                    
+        except Exception as e:
+            print(f"Error estimating intensities for {company_name}: {e}")
+            # Fallback: use a conservative default intensity
+            default_intensity = 0.0001  # 0.1 tCO2e per $1000 sales
+            for year_int, data in intensity_data.items():
+                if data['intensity'] is None and data['sales'] is not None:
+                    intensity_data[year_int]['intensity'] = default_intensity
