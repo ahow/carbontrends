@@ -49,7 +49,7 @@ class ChartBuilder:
                 mode='lines',
                 name='Monthly Smooth Trend',
                 line=dict(color=self.color_palette['smooth_trend'], width=3),
-                hovertemplate='<b>%{x}</b><br>' +
+                hovertemplate='<b>%{x|%Y-%m}</b><br>' +
                             'Monthly Attribution: %{y:.1f} tCO₂e<br>' +
                             '<extra></extra>',
                 showlegend=True
@@ -65,7 +65,7 @@ class ChartBuilder:
                     name='Annual Reported Data (Steps)',
                     line=dict(color=self.color_palette['reported_data'], width=2, shape='hv'),
                     connectgaps=False,
-                    hovertemplate='<b>%{x|%Y}</b><br>' +
+                    hovertemplate='<b>%{x|%Y-%m}</b><br>' +
                                 'Annual Data: %{y:.1f} tCO₂e/month<br>' +
                                 'Data Quality: Reported<br>' +
                                 '<extra></extra>',
@@ -178,23 +178,15 @@ class ChartBuilder:
             for i, year in enumerate(sorted_years):
                 value = year_values[year]
                 
-                # Add year start point
-                step_points.append({
-                    'date': pd.Timestamp(year=year, month=1, day=1),
-                    'monthly_emissions_attributed': value,
-                    'year': year,
-                    'month': 1,
-                    'data_quality': quality_filter
-                })
-                
-                # Add year end point
-                step_points.append({
-                    'date': pd.Timestamp(year=year, month=12, day=31),
-                    'monthly_emissions_attributed': value,
-                    'year': year,
-                    'month': 12,
-                    'data_quality': quality_filter
-                })
+                # Add monthly points throughout the year to align with smooth trend
+                for month in range(1, 13):
+                    step_points.append({
+                        'date': pd.Timestamp(year=year, month=month, day=1),
+                        'monthly_emissions_attributed': value,
+                        'year': year,
+                        'month': month,
+                        'data_quality': quality_filter
+                    })
             
             step_df = pd.DataFrame(step_points)
             return step_df.sort_values('date').reset_index(drop=True)
@@ -242,23 +234,15 @@ class ChartBuilder:
             for year in sorted_years:
                 value = year_values[year]
                 
-                # Add year start point
-                step_points.append({
-                    'date': pd.Timestamp(year=year, month=1, day=1),
-                    'monthly_emissions_attributed': value,
-                    'year': year,
-                    'month': 1,
-                    'data_quality': 'estimated'
-                })
-                
-                # Add year end point
-                step_points.append({
-                    'date': pd.Timestamp(year=year, month=12, day=31),
-                    'monthly_emissions_attributed': value,
-                    'year': year,
-                    'month': 12,
-                    'data_quality': 'estimated'
-                })
+                # Add monthly points throughout the year to align with smooth trend
+                for month in range(1, 13):
+                    step_points.append({
+                        'date': pd.Timestamp(year=year, month=month, day=1),
+                        'monthly_emissions_attributed': value,
+                        'year': year,
+                        'month': month,
+                        'data_quality': 'estimated'
+                    })
             
             step_df = pd.DataFrame(step_points)
             return step_df.sort_values('date').reset_index(drop=True)
@@ -301,7 +285,7 @@ class ChartBuilder:
                     name=trace_name,
                     line=dict(color=self.color_palette['estimated_data'], width=2, shape='hv', dash='dash'),
                     connectgaps=False,
-                    hovertemplate='<b>%{x|%Y}</b><br>' +
+                    hovertemplate='<b>%{x|%Y-%m}</b><br>' +
                                 'Annual Data: %{y:.1f} tCO₂e/month<br>' +
                                 'Data Quality: Estimated<br>' +
                                 '<extra></extra>',
