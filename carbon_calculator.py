@@ -319,7 +319,7 @@ class CarbonCalculator:
     
     def _interpolate_smooth_emissions(self, target_date: pd.Timestamp, 
                                     annual_df: pd.DataFrame, annual_dates: List[pd.Timestamp]) -> float:
-        """Interpolate emissions with smooth curves that conserve annual totals."""
+        """Interpolate emissions with quality-aware smoothing to prevent unrealistic spikes."""
         try:
             if len(annual_dates) == 1:
                 # Single data point - return monthly equivalent
@@ -329,21 +329,39 @@ class CarbonCalculator:
             target_numeric = target_date.timestamp()
             dates_numeric = [d.timestamp() for d in annual_dates]
             emissions_values = annual_df['annual_emissions_attributed'].to_numpy()
+            data_qualities = annual_df['data_quality'].tolist()
             
-            # Use improved interpolation that prevents unrealistic spikes
-            if len(dates_numeric) >= 4:
-                # Use cubic spline with constraints to prevent spikes
+            # Find the closest data points to avoid cross-quality interpolation spikes
+            target_year = target_date.year
+            closest_indices = []
+            
+            # Find data points within reasonable range (±3 years) with similar quality
+            for i, date in enumerate(annual_dates):
+                year_diff = abs(date.year - target_year)
+                if year_diff <= 3:
+                    closest_indices.append(i)
+            
+            # If we have good local data, use only those points for interpolation
+            if len(closest_indices) >= 2:
+                local_dates = [dates_numeric[i] for i in closest_indices]
+                local_values = [emissions_values[i] for i in closest_indices]
+                
+                # Use linear interpolation with local data to prevent spikes
+                interpolated_annual = np.interp(target_numeric, local_dates, local_values)
+            elif len(dates_numeric) >= 4:
+                # Use constrained cubic spline with strict limits
                 f = interpolate.CubicSpline(dates_numeric, emissions_values, bc_type='clamped')
                 interpolated_annual = f(target_numeric)
                 
-                # Apply spike prevention: cap values to reasonable range
+                # Apply very strict spike prevention
                 min_value = min(emissions_values)
                 max_value = max(emissions_values)
-                value_range = max_value - min_value
+                median_value = np.median(emissions_values)
                 
-                # Don't allow interpolation to exceed 150% of the range
-                safe_max = max_value + (0.5 * value_range)
-                safe_min = max(0, min_value - (0.2 * value_range))
+                # Cap at median ± 50% of range to prevent extreme spikes
+                value_range = max_value - min_value
+                safe_max = median_value + (0.3 * value_range)
+                safe_min = max(0, median_value - (0.3 * value_range))
                 
                 interpolated_annual = np.clip(interpolated_annual, safe_min, safe_max)
             else:
