@@ -4,6 +4,12 @@
 
 This is a Streamlit-based carbon emissions attribution dashboard that analyzes the carbon footprint attributable to $1M investments across companies. The application processes financial and emissions data from Excel files to calculate and visualize carbon attribution over time with smooth temporal trends and data quality transparency. Users can upload company data or work with sample data to explore carbon attribution patterns across different investments.
 
+## Recent Changes (January 2025)
+
+- **Fixed Monthly Conversion Bug**: Resolved critical issue where carbon attribution charts were displaying annual emissions values instead of monthly values. Charts now correctly show monthly emissions (annual ÷ 12) for proper temporal comparison.
+- **Enhanced Tab Structure**: Reorganized application into 6 logical tabs (About, Data Upload, Company Analysis, Portfolio Analysis, Portfolio Library, System Status) for improved user workflow.
+- **Improved Data Processing**: Enhanced upload error handling and progress indicators to prevent "stuck on processing" issues.
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
