@@ -75,19 +75,8 @@ class ChartBuilder:
             # Add annual estimated data points as step functions (only for years without reported data)
             estimated_data = self._get_estimated_only_points(data_sorted)
             if not estimated_data.empty:
-                fig.add_trace(go.Scatter(
-                    x=estimated_data['date'],
-                    y=estimated_data['monthly_emissions_attributed'],
-                    mode='lines',
-                    name='Annual Estimated Data (Steps)',
-                    line=dict(color=self.color_palette['estimated_data'], width=2, shape='hv', dash='dash'),
-                    connectgaps=False,
-                    hovertemplate='<b>%{x|%Y}</b><br>' +
-                                'Annual Data: %{y:.1f} tCO₂e/month<br>' +
-                                'Data Quality: Estimated<br>' +
-                                '<extra></extra>',
-                    showlegend=True
-                ))
+                # Create separate traces for each continuous estimated period to avoid connecting across gaps
+                self._add_estimated_traces(fig, estimated_data)
             
             # Update layout
             fig.update_layout(
@@ -180,11 +169,7 @@ class ChartBuilder:
             if not year_values:
                 return pd.DataFrame()
             
-            # Debug: Print values for troubleshooting
-            if quality_filter == 'estimated':
-                print(f"DEBUG: Estimated step values for chart: {year_values}")
-            elif quality_filter == 'reported':
-                print(f"DEBUG: Reported step values for chart: {year_values}")
+            # No debugging output needed for production
             
             # Create step function points - only connect consecutive years
             step_points = []
@@ -248,9 +233,7 @@ class ChartBuilder:
             if not year_values:
                 return pd.DataFrame()
             
-            # Debug: Print values for troubleshooting
-            print(f"DEBUG: Estimated-only step values for chart (excluding reported years {sorted(reported_years)}): {year_values}")
-            print(f"DEBUG: Estimated-only years being plotted: {sorted(year_values.keys())}")
+            # Clean separation: only show estimated data for years without reported data
             
             # Create step function points
             step_points = []
@@ -283,6 +266,51 @@ class ChartBuilder:
         except Exception as e:
             print(f"Error creating estimated-only step function: {e}")
             return pd.DataFrame()
+    
+    def _add_estimated_traces(self, fig: go.Figure, estimated_data: pd.DataFrame) -> None:
+        """Add estimated data as separate traces for each continuous period."""
+        try:
+            if estimated_data.empty:
+                return
+            
+            # Group by continuous year periods to avoid connecting across gaps
+            years = sorted(estimated_data['year'].unique())
+            continuous_periods = []
+            current_period = [years[0]]
+            
+            for i in range(1, len(years)):
+                if years[i] == years[i-1] + 1:  # Consecutive year
+                    current_period.append(years[i])
+                else:  # Gap detected, start new period
+                    continuous_periods.append(current_period)
+                    current_period = [years[i]]
+            
+            continuous_periods.append(current_period)  # Add the last period
+            
+            # Add separate trace for each continuous period
+            for i, period in enumerate(continuous_periods):
+                period_data = estimated_data[estimated_data['year'].isin(period)]
+                
+                show_legend = i == 0  # Only show legend for first trace
+                trace_name = 'Annual Estimated Data (Steps)' if show_legend else None
+                
+                fig.add_trace(go.Scatter(
+                    x=period_data['date'],
+                    y=period_data['monthly_emissions_attributed'],
+                    mode='lines',
+                    name=trace_name,
+                    line=dict(color=self.color_palette['estimated_data'], width=2, shape='hv', dash='dash'),
+                    connectgaps=False,
+                    hovertemplate='<b>%{x|%Y}</b><br>' +
+                                'Annual Data: %{y:.1f} tCO₂e/month<br>' +
+                                'Data Quality: Estimated<br>' +
+                                '<extra></extra>',
+                    showlegend=show_legend,
+                    legendgroup='estimated'  # Group all estimated traces together
+                ))
+                
+        except Exception as e:
+            print(f"Error adding estimated traces: {e}")
     
     def create_sector_comparison_chart(self, data: List[Dict[str, Any]]) -> Optional[go.Figure]:
         """Create a chart comparing carbon attribution across sectors."""
