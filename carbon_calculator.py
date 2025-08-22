@@ -489,16 +489,42 @@ class CarbonCalculator:
                         print(f"Used default carbon intensity for {company_name} year {year_int}: {default_intensity:.6f} tCO2e/USD")
                 return
             
-            # Interpolate/extrapolate missing intensities
+            # Interpolate/extrapolate missing intensities with realistic trends
             valid_years_array = np.array(valid_years)
             valid_intensities_array = np.array(valid_intensities)
             
-            for year_int, data in intensity_data.items():
-                if data['intensity'] is None and data['sales'] is not None:
-                    # Linear interpolation/extrapolation
-                    estimated_intensity = np.interp(year_int, valid_years_array, valid_intensities_array)
-                    intensity_data[year_int]['intensity'] = estimated_intensity
-                    print(f"Estimated carbon intensity for {company_name} year {year_int}: {estimated_intensity:.6f} tCO2e/USD")
+            # If we have enough data points, fit a trend line
+            if len(valid_intensities) >= 3:
+                # Fit linear trend to capture improvement/worsening over time
+                trend_coeffs = np.polyfit(valid_years_array, valid_intensities_array, 1)
+                slope, intercept = trend_coeffs
+                
+                print(f"Carbon intensity trend for {company_name}: slope={slope:.8f} tCO2e/USD/year, intercept={intercept:.6f}")
+                
+                for year_int, data in intensity_data.items():
+                    if data['intensity'] is None and data['sales'] is not None:
+                        # Use trend line for extrapolation, interpolation for interior points
+                        if year_int < min(valid_years_array) or year_int > max(valid_years_array):
+                            # Extrapolation: use trend line but cap reasonable bounds
+                            estimated_intensity = slope * year_int + intercept
+                            # Cap to reasonable range (0.5x to 2x median of valid data)
+                            median_intensity = np.median(valid_intensities_array)
+                            estimated_intensity = np.clip(estimated_intensity, 
+                                                        median_intensity * 0.5, 
+                                                        median_intensity * 2.0)
+                        else:
+                            # Interpolation: use linear interpolation for interior points
+                            estimated_intensity = np.interp(year_int, valid_years_array, valid_intensities_array)
+                        
+                        intensity_data[year_int]['intensity'] = estimated_intensity
+                        print(f"Estimated carbon intensity for {company_name} year {year_int}: {estimated_intensity:.6f} tCO2e/USD")
+            else:
+                # Fallback to simple linear interpolation
+                for year_int, data in intensity_data.items():
+                    if data['intensity'] is None and data['sales'] is not None:
+                        estimated_intensity = np.interp(year_int, valid_years_array, valid_intensities_array)
+                        intensity_data[year_int]['intensity'] = estimated_intensity
+                        print(f"Estimated carbon intensity for {company_name} year {year_int}: {estimated_intensity:.6f} tCO2e/USD")
                     
         except Exception as e:
             print(f"Error estimating intensities for {company_name}: {e}")
