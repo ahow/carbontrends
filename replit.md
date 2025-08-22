@@ -14,9 +14,10 @@ Preferred communication style: Simple, everyday language.
 The application uses Streamlit as the web framework with a modern multi-tab interface featuring:
 - **Tab 1 - About**: Application overview, features explanation, and getting started guide
 - **Tab 2 - Data Upload**: Carbon data and portfolio file upload with persistent storage
-- **Tab 3 - Portfolio Analysis**: Individual company analysis and portfolio exposure tracking
-- **Tab 4 - Portfolio Library**: Complete portfolio management with create/update/delete operations
-- **Tab 5 - System Status**: Health monitoring, error messages, and maintenance tools
+- **Tab 3 - Company Analysis**: Individual company carbon attribution analysis and investment calculations
+- **Tab 4 - Portfolio Analysis**: Portfolio-level carbon exposure tracking and aggregated portfolio analysis
+- **Tab 5 - Portfolio Library**: Complete portfolio management with create/update/delete operations
+- **Tab 6 - System Status**: Health monitoring, error messages, and maintenance tools
 - Interactive visualizations using Plotly for charts and graphs
 - Wide layout configuration optimized for data visualization
 - Persistent data storage across sessions

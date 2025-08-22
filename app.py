@@ -38,9 +38,10 @@ st.title("Carbon Attribution Dashboard")
 st.markdown("Track carbon emissions attributable to $1M investments over time")
 
 # Create tabs for different pages
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📖 About", 
     "📊 Data Upload", 
+    "🏢 Company Analysis", 
     "📈 Portfolio Analysis", 
     "📁 Portfolio Library", 
     "⚠️ System Status"
@@ -87,7 +88,7 @@ with tab1:
         st.subheader("🎯 Key Features")
         st.markdown("""
         - **Individual Company Analysis**: Calculate carbon emissions attributable to specific investment amounts
-        - **Portfolio Exposure Tracking**: Monitor how carbon intensity changes affect your entire portfolio
+        - **Portfolio Exposure Analysis**: Track how carbon intensity changes affect your entire portfolio over time
         - **Temporal Analysis**: Smooth trend analysis with both reported and estimated data points
         - **Data Persistence**: Upload once, analyze across multiple sessions
         - **Portfolio Library**: Manage multiple portfolios with different time periods
@@ -132,7 +133,7 @@ with tab1:
         """)
     
     st.markdown("---")
-    st.info("💡 **Getting Started**: Use the 'Data Upload' tab to upload your carbon and portfolio data files. The system will save your data for future sessions.")
+    st.info("💡 **Getting Started**: Use the 'Data Upload' tab to upload your files, then navigate to 'Company Analysis' or 'Portfolio Analysis' based on your needs.")
 
 # Tab 2: Data Upload
 with tab2:
@@ -329,28 +330,11 @@ with tab2:
             except Exception as e:
                 st.error(f"❌ Error processing portfolio: {str(e)}")
 
-# Tab 3: Portfolio Analysis  
+# Tab 3: Company Analysis
 with tab3:
 
-    st.header("Portfolio Analysis")
-    st.markdown("Analyze individual companies and examine portfolio carbon exposure")
-    
-    # Portfolio selection for analysis
-    portfolio_names = st.session_state.data_persistence.get_portfolio_names()
-    selected_portfolio = None
-    
-    if portfolio_names:
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            selected_portfolio = st.selectbox(
-                "Select portfolio for analysis",
-                ["-- None --"] + portfolio_names,
-                key="analysis_portfolio_selector"
-            )
-        with col2:
-            if selected_portfolio != "-- None --":
-                st.session_state.current_portfolio = selected_portfolio
-                st.success(f"📁 Active: {selected_portfolio}")
+    st.header("Company Analysis")
+    st.markdown("Analyze carbon attribution for individual companies with specific investment amounts")
     
     # Main analysis content
     if st.session_state.calculator is not None:
@@ -557,7 +541,29 @@ with tab3:
     else:
         # Show guidance if no data loaded
         st.info("📂 Upload carbon data in the 'Data Upload' tab first")
-        st.markdown("Carbon data is required before you can analyze individual companies or portfolios.")
+        st.markdown("Carbon data is required before you can analyze individual companies.")
+
+# Tab 4: Portfolio Analysis
+with tab4:
+    st.header("Portfolio Analysis")
+    st.markdown("Analyze portfolio-level carbon exposure and track changes over time")
+    
+    # Portfolio selection for analysis
+    portfolio_names = st.session_state.data_persistence.get_portfolio_names()
+    selected_portfolio = None
+    
+    if portfolio_names:
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            selected_portfolio = st.selectbox(
+                "Select portfolio for analysis",
+                ["-- None --"] + portfolio_names,
+                key="portfolio_analysis_selector"
+            )
+        with col2:
+            if selected_portfolio != "-- None --":
+                st.session_state.current_portfolio = selected_portfolio
+                st.success(f"📁 Active: {selected_portfolio}")
     
     # Portfolio Analysis Section
     if st.session_state.portfolio_analyzer is not None and st.session_state.current_portfolio is not None:
@@ -645,8 +651,19 @@ with tab3:
                 else:
                     st.error("Could not calculate portfolio carbon exposure. Please check your data.")
 
-# Tab 4: Portfolio Library
-with tab4:
+    else:
+        # Show guidance if no portfolio loaded
+        if not portfolio_names:
+            st.info("📂 Upload portfolio data in the 'Data Upload' tab first")
+            st.markdown("Portfolio data is required for portfolio-level analysis.")
+        elif st.session_state.calculator is None:
+            st.info("📂 Upload carbon data in the 'Data Upload' tab first")
+            st.markdown("Both carbon data and portfolio data are required for portfolio analysis.")
+        else:
+            st.info("📁 Select a portfolio from the dropdown above to begin analysis")
+
+# Tab 5: Portfolio Library
+with tab5:
     st.header("Portfolio Library")
     st.markdown("Manage your portfolio collection and data")
     
@@ -733,8 +750,8 @@ with tab4:
                 st.session_state.data_persistence.cleanup_old_data()
                 st.success("Cleanup completed")
 
-# Tab 5: System Status
-with tab5:
+# Tab 6: System Status
+with tab6:
     st.header("System Status")
     st.markdown("Monitor system health and view error messages")
     
