@@ -464,6 +464,7 @@ with tab3:
                     st.markdown("Monthly carbon emissions attributable to $1M investment (smoothed trend)")
                     
                     # Create the chart
+                    fig = None
                     if st.session_state.chart_builder is not None:
                         fig = st.session_state.chart_builder.create_attribution_chart(
                             attribution_data, selected_company, investment_amount
@@ -487,12 +488,14 @@ with tab3:
                     
                     # Format data for display
                     table_data = []
+                    confidence_score = min(100, reported_data_pct + 20) if 'reported_data_pct' in locals() else 85
+                    
                     for _, row in recent_data.iterrows():
-                        month_str = row['date'].strftime('%Y-%m')
+                        month_str = pd.to_datetime(row['date']).strftime('%Y-%m')
                         ev_formatted = f"${row['enterprise_value']/1e6:.1f}M" if row['enterprise_value'] > 0 else "N/A"
                         ownership_pct = f"{row['ownership_percentage']*100:.4f}%"
                         attribution = f"{row['monthly_emissions_attributed']:.2f}"
-                        confidence = f"{confidence_score:.0f}%" if 'confidence_score' in locals() else "85%"
+                        confidence = f"{confidence_score:.0f}%"
                         status = str(row['data_quality']).title()
                         method = "Temporal Extrapolation / Reported" if str(row['data_quality']) == 'estimated' else "Reported Data"
                         
@@ -632,9 +635,12 @@ with tab4:
                     st.subheader("Portfolio Carbon Exposure Over Time")
                     st.markdown("Weighted carbon exposure changes across all portfolio holdings")
                     
-                    portfolio_chart = st.session_state.chart_builder.create_portfolio_exposure_chart(exposure_analysis)
-                    if portfolio_chart:
-                        st.plotly_chart(portfolio_chart, use_container_width=True)
+                    if st.session_state.chart_builder is not None:
+                        portfolio_chart = st.session_state.chart_builder.create_portfolio_exposure_chart(exposure_analysis)
+                        if portfolio_chart:
+                            st.plotly_chart(portfolio_chart, use_container_width=True)
+                    else:
+                        st.error("Chart builder not available")
                     
                     # Display detailed exposure table
                     st.subheader("Period-by-Period Analysis")

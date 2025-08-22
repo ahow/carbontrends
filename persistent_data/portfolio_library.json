@@ -1,0 +1,22 @@
+{
+  "PortfolioA": {
+    "created_at": "2025-08-22T09:17:33.726578",
+    "updated_at": "2025-08-22T09:17:33.726587",
+    "num_periods": 21,
+    "date_range": {
+      "start": "2020-07-01T00:00:00",
+      "end": "2025-07-01T00:00:00"
+    },
+    "total_holdings": 21
+  },
+  "Portfolio3M": {
+    "created_at": "2025-08-22T09:22:14.334438",
+    "updated_at": "2025-08-22T09:22:14.334445",
+    "num_periods": 21,
+    "date_range": {
+      "start": "2020-07-01T00:00:00",
+      "end": "2025-07-01T00:00:00"
+    },
+    "total_holdings": 21
+  }
+}

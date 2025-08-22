@@ -96,11 +96,13 @@ class DataProcessor:
                     df_clean[col] = 'Unknown'
             
             # Remove rows with invalid ISIN or Company names
+            isin_series = df_clean['ISIN'].astype(str)
+            company_series = df_clean['Company'].astype(str)
             mask = (
-                (df_clean['ISIN'].astype(str) != 'nan') & 
-                (df_clean['Company'].astype(str) != 'nan') &
-                (df_clean['ISIN'].astype(str).str.len() > 0) &
-                (df_clean['Company'].astype(str).str.len() > 0)
+                (isin_series != 'nan') & 
+                (company_series != 'nan') &
+                (isin_series.str.len() > 0) &
+                (company_series.str.len() > 0)
             )
             df_clean = df_clean[mask].copy()
             
