@@ -36,15 +36,15 @@ st.set_page_config(
 # Title and description
 st.title("Carbon Attribution Dashboard")
 st.markdown("Track carbon emissions attributable to $1M investments over time")
-st.markdown("---")
 
-# Navigation
-st.sidebar.header("Navigation")
-page = st.sidebar.radio(
-    "Select Page",
-    ["Dashboard", "Portfolio Library"],
-    index=0
-)
+# Create tabs for different pages
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📖 About", 
+    "📊 Data Upload", 
+    "📈 Portfolio Analysis", 
+    "📁 Portfolio Library", 
+    "⚠️ System Status"
+])
 
 # Initialize session state
 if 'data_processor' not in st.session_state:
@@ -73,22 +73,106 @@ if st.session_state.calculator is None and st.session_state.data_persistence.has
             if data_info:
                 st.sidebar.success(f"✅ Loaded saved data with {data_info.get('num_companies', 0)} companies")
 
-# Dashboard Page
-if page == "Dashboard":
-    # Sidebar - File Upload
-    st.sidebar.header("Data Upload")
+# Tab 1: About Page
+with tab1:
+    st.header("About the Carbon Attribution Dashboard")
+    
+    st.markdown("""
+    This dashboard analyzes carbon emissions attributable to investments and tracks portfolio exposure to carbon intensity changes over time.
+    """)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🎯 Key Features")
+        st.markdown("""
+        - **Individual Company Analysis**: Calculate carbon emissions attributable to specific investment amounts
+        - **Portfolio Exposure Tracking**: Monitor how carbon intensity changes affect your entire portfolio
+        - **Temporal Analysis**: Smooth trend analysis with both reported and estimated data points
+        - **Data Persistence**: Upload once, analyze across multiple sessions
+        - **Portfolio Library**: Manage multiple portfolios with different time periods
+        """)
+        
+        st.subheader("🔧 How It Works")
+        st.markdown("""
+        **Carbon Attribution Calculation:**
+        1. Investment ownership % = Investment Amount ÷ Enterprise Value
+        2. Attributed Emissions = Ownership % × Company's Total Emissions
+        3. Monthly values calculated using smooth interpolation
+        
+        **Portfolio Exposure Analysis:**
+        1. Calculate portfolio weights for each holding per period
+        2. Track carbon intensity changes between periods
+        3. Weight × Carbon Change for each holding
+        4. Sum across all holdings for total portfolio exposure
+        """)
+    
+    with col2:
+        st.subheader("📋 Required Data")
+        st.markdown("""
+        **Carbon Data File (Excel):**
+        - **Reference Sheet**: Company information (Name, ISIN, Sector, Industry, Country)
+        - **Carbon Sheet**: Annual carbon emissions data by company
+        - **Sales Sheet**: Annual sales/revenue data by company  
+        - **EV Sheet**: Enterprise value data by company
+        
+        **Portfolio Data File (Excel):**
+        - **Multiple Sheets**: Named in DD.MM.YY format (e.g., "01.07.20")
+        - **ISIN Column**: Company identifiers matching carbon data
+        - **TotalNominal Column**: Investment value for each holding
+        """)
+        
+        st.subheader("📊 Analysis Output")
+        st.markdown("""
+        - **Large Metric Cards**: Monthly/annual attribution, data quality, confidence scores
+        - **Interactive Charts**: Time series with smooth trends and step functions for annual data
+        - **Detailed Tables**: Monthly breakdowns with calculation transparency
+        - **Portfolio Exposure**: Weighted carbon exposure changes over time
+        - **Export Capabilities**: Download results as CSV for further analysis
+        """)
+    
+    st.markdown("---")
+    st.info("💡 **Getting Started**: Use the 'Data Upload' tab to upload your carbon and portfolio data files. The system will save your data for future sessions.")
+
+# Tab 2: Data Upload
+with tab2:
+    st.header("Data Upload & Management")
+    st.markdown("Upload carbon data and portfolio files for persistent analysis across sessions")
+    
+    # Carbon Data Section
+    st.subheader("🏭 Carbon Data Upload")
     
     # Show current data status
     if st.session_state.calculator is not None:
         data_info = st.session_state.data_persistence.get_carbon_data_info()
         if data_info:
-            st.sidebar.info(f"📊 Current: {data_info.get('num_companies', 0)} companies")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Companies", data_info.get('num_companies', 0))
+            with col2:
+                saved_date = pd.to_datetime(data_info.get('saved_at', '')).strftime('%Y-%m-%d')
+                st.metric("Last Updated", saved_date)
+            with col3:
+                st.metric("Data Sheets", len(data_info.get('sheets', [])))
+        
+        st.success("✅ Carbon data is loaded and ready for analysis")
+    else:
+        st.info("📂 No carbon data loaded. Upload an Excel file to get started.")
     
-    uploaded_file = st.sidebar.file_uploader(
-        "Upload Excel file with company data",
+    uploaded_file = st.file_uploader(
+        "Upload Excel file with company carbon data",
         type=['xlsx', 'xls'],
         help="Excel file should contain sheets: Reference, Carbon, Sales, EV"
     )
+    
+    if uploaded_file:
+        st.markdown("**File Requirements:**")
+        st.markdown("""
+        - **Reference**: Company names, ISINs, sectors, industries, countries
+        - **Carbon**: Annual carbon emissions by company and year
+        - **Sales**: Annual sales/revenue data by company and year
+        - **EV**: Enterprise value data by company and year
+        """)
 
     # Process carbon data when file is uploaded
     if uploaded_file is not None:
@@ -103,25 +187,35 @@ if page == "Dashboard":
                 if data is not None:
                     # Save data persistently
                     if st.session_state.data_persistence.save_carbon_data(data):
-                        st.sidebar.success("✅ Carbon data saved successfully!")
+                        st.success("✅ Carbon data saved successfully!")
                     
                     # Initialize calculator and chart builder
                     st.session_state.calculator = CarbonCalculator(data)
                     st.session_state.chart_builder = ChartBuilder()
                     st.session_state.portfolio_analyzer = PortfolioAnalyzer(st.session_state.calculator)
                     
-                    # Display data summary in sidebar
-                    st.sidebar.subheader("📈 Data Summary")
-                    companies_count = len(data['reference'])
-                    st.sidebar.metric("Total Companies", companies_count)
+                    # Display data summary
+                    st.subheader("📈 Data Summary")
                     
-                    # Show data date range
-                    carbon_data = data['carbon']
-                    if not carbon_data.empty:
-                        years = [col for col in carbon_data.columns if str(col).isdigit()]
-                        if years:
-                            min_year, max_year = min(years), max(years)
-                            st.sidebar.metric("Data Range", f"{min_year} - {max_year}")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        companies_count = len(data['reference'])
+                        st.metric("Total Companies", companies_count)
+                    
+                    with col2:
+                        # Show data date range
+                        carbon_data = data['carbon']
+                        if not carbon_data.empty:
+                            years = [col for col in carbon_data.columns if str(col).isdigit()]
+                            if years:
+                                min_year, max_year = min(years), max(years)
+                                st.metric("Data Range", f"{min_year} - {max_year}")
+                    
+                    with col3:
+                        sheet_count = len([k for k in data.keys() if not data[k].empty])
+                        st.metric("Valid Sheets", sheet_count)
+                    
+                    st.rerun()
                     
                 else:
                     st.error("❌ Failed to load data. Please check your Excel file format.")
@@ -130,52 +224,61 @@ if page == "Dashboard":
             st.error(f"❌ Error processing file: {str(e)}")
             st.info("Please ensure your Excel file contains the required sheets: Reference, Carbon, Sales, EV")
 
-    # Portfolio analysis file upload
-    st.sidebar.header("Portfolio Analysis")
+    st.markdown("---")
+    st.subheader("📁 Portfolio Data Upload")
     
-    # Portfolio selection
+    # Show portfolio library status
     portfolio_names = st.session_state.data_persistence.get_portfolio_names()
     if portfolio_names:
-        selected_portfolio = st.sidebar.selectbox(
-            "Select existing portfolio",
-            ["-- None --"] + portfolio_names,
-            key="portfolio_selector"
-        )
+        st.info(f"📊 Portfolio Library: {len(portfolio_names)} portfolios saved")
         
-        if selected_portfolio != "-- None --":
-            st.session_state.current_portfolio = selected_portfolio
-            st.sidebar.info(f"📁 Active: {selected_portfolio}")
+        with st.expander("View Existing Portfolios"):
+            for name in portfolio_names:
+                portfolio_info = st.session_state.data_persistence.load_portfolio_library().get(name, {})
+                periods = portfolio_info.get('num_periods', 0)
+                holdings = portfolio_info.get('total_holdings', 0)
+                st.markdown(f"**{name}**: {periods} periods, {holdings} holdings")
+    else:
+        st.info("📂 No portfolios in library. Upload portfolio data to get started.")
     
-    portfolio_file = st.sidebar.file_uploader(
-        "Upload new portfolio data",
+    portfolio_file = st.file_uploader(
+        "Upload portfolio holdings Excel file",
         type=['xlsx', 'xls'],
         help="Excel file with sheets named DD.MM.YY containing ISIN and TotalNominal columns",
         key="portfolio_upload"
     )
     
+    if portfolio_file:
+        st.markdown("**File Requirements:**")
+        st.markdown("""
+        - **Sheet Names**: DD.MM.YY format (e.g., "01.07.20", "01.10.20")
+        - **ISIN Column**: Company identifiers matching your carbon data
+        - **TotalNominal Column**: Investment values for each holding
+        """)
+    
     # Portfolio name input for new uploads
     if portfolio_file is not None:
-        portfolio_action = st.sidebar.radio(
-            "Action",
+        portfolio_action = st.radio(
+            "What would you like to do?",
             ["Create new portfolio", "Add to existing portfolio"],
             key="portfolio_action"
         )
         
         if portfolio_action == "Create new portfolio":
-            portfolio_name = st.sidebar.text_input(
-                "Portfolio name",
+            portfolio_name = st.text_input(
+                "Enter portfolio name",
                 key="new_portfolio_name",
-                help="Enter a name for this portfolio"
+                help="Choose a unique name for this portfolio"
             )
         else:
             if portfolio_names:
-                portfolio_name = st.sidebar.selectbox(
+                portfolio_name = st.selectbox(
                     "Select portfolio to update",
                     portfolio_names,
                     key="update_portfolio_name"
                 )
             else:
-                st.sidebar.error("No existing portfolios found. Please create a new one.")
+                st.error("No existing portfolios found. Please create a new one.")
                 portfolio_name = None
 
         # Process portfolio data when uploaded
@@ -187,25 +290,48 @@ if page == "Dashboard":
                     if portfolio_data:
                         if portfolio_action == "Create new portfolio":
                             if st.session_state.data_persistence.save_portfolio(portfolio_name, portfolio_data):
-                                st.sidebar.success(f"✅ Portfolio '{portfolio_name}' created successfully!")
+                                st.success(f"✅ Portfolio '{portfolio_name}' created successfully!")
                                 st.session_state.current_portfolio = portfolio_name
                             else:
-                                st.sidebar.error("❌ Failed to save portfolio")
+                                st.error("❌ Failed to save portfolio")
                         
                         elif portfolio_action == "Add to existing portfolio":
                             if st.session_state.data_persistence.add_data_to_portfolio(portfolio_name, portfolio_data):
-                                st.sidebar.success(f"✅ Data added to portfolio '{portfolio_name}'!")
+                                st.success(f"✅ Data added to portfolio '{portfolio_name}'!")
                                 st.session_state.current_portfolio = portfolio_name
                             else:
-                                st.sidebar.error("❌ Failed to add data to portfolio")
+                                st.error("❌ Failed to add data to portfolio")
                     
                     else:
-                        st.sidebar.error("❌ Failed to parse portfolio data")
+                        st.error("❌ Failed to parse portfolio data")
                         
             except Exception as e:
-                st.sidebar.error(f"❌ Error processing portfolio: {str(e)}")
+                st.error(f"❌ Error processing portfolio: {str(e)}")
 
-    # Main dashboard content
+# Tab 3: Portfolio Analysis  
+with tab3:
+
+    st.header("Portfolio Analysis")
+    st.markdown("Analyze individual companies and examine portfolio carbon exposure")
+    
+    # Portfolio selection for analysis
+    portfolio_names = st.session_state.data_persistence.get_portfolio_names()
+    selected_portfolio = None
+    
+    if portfolio_names:
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            selected_portfolio = st.selectbox(
+                "Select portfolio for analysis",
+                ["-- None --"] + portfolio_names,
+                key="analysis_portfolio_selector"
+            )
+        with col2:
+            if selected_portfolio != "-- None --":
+                st.session_state.current_portfolio = selected_portfolio
+                st.success(f"📁 Active: {selected_portfolio}")
+    
+    # Main analysis content
     if st.session_state.calculator is not None:
         # Company selection
         companies = st.session_state.calculator.get_companies_list()
@@ -409,14 +535,8 @@ if page == "Dashboard":
     
     else:
         # Show guidance if no data loaded
-        st.info("📂 Upload an Excel file with company carbon data to get started")
-        st.markdown("""
-        **Required Excel sheets:**
-        - **Reference**: Company information (Name, ISIN, Sector, Industry, Country)
-        - **Carbon**: Annual carbon emissions data
-        - **Sales**: Annual sales/revenue data  
-        - **EV**: Enterprise value data
-        """)
+        st.info("📂 Upload carbon data in the 'Data Upload' tab first")
+        st.markdown("Carbon data is required before you can analyze individual companies or portfolios.")
     
     # Portfolio Analysis Section
     if st.session_state.portfolio_analyzer is not None and st.session_state.current_portfolio is not None:
@@ -504,7 +624,8 @@ if page == "Dashboard":
                 else:
                     st.error("Could not calculate portfolio carbon exposure. Please check your data.")
 
-elif page == "Portfolio Library":
+# Tab 4: Portfolio Library
+with tab4:
     st.header("Portfolio Library")
     st.markdown("Manage your portfolio collection and data")
     
@@ -590,6 +711,144 @@ elif page == "Portfolio Library":
             if st.button("Clean Up Old Data", type="secondary"):
                 st.session_state.data_persistence.cleanup_old_data()
                 st.success("Cleanup completed")
+
+# Tab 5: System Status
+with tab5:
+    st.header("System Status")
+    st.markdown("Monitor system health and view error messages")
+    
+    # Data Status
+    st.subheader("📊 Data Status")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Carbon Data**")
+        if st.session_state.calculator is not None:
+            data_info = st.session_state.data_persistence.get_carbon_data_info()
+            if data_info:
+                st.success("✅ Carbon data loaded")
+                st.write(f"Companies: {data_info.get('num_companies', 0)}")
+                st.write(f"Saved: {pd.to_datetime(data_info.get('saved_at', '')).strftime('%Y-%m-%d %H:%M')}")
+            else:
+                st.warning("⚠️ Carbon data loaded but no metadata available")
+        else:
+            st.error("❌ No carbon data loaded")
+    
+    with col2:
+        st.markdown("**Portfolio Library**")
+        portfolio_count = len(st.session_state.data_persistence.get_portfolio_names())
+        if portfolio_count > 0:
+            st.success(f"✅ {portfolio_count} portfolios in library")
+            current = st.session_state.current_portfolio
+            if current:
+                st.write(f"Active: {current}")
+            else:
+                st.write("No active portfolio selected")
+        else:
+            st.error("❌ No portfolios in library")
+    
+    # Session State Information
+    st.subheader("🔧 Session Information")
+    
+    session_info = {
+        "Data Processor": st.session_state.data_processor is not None,
+        "Calculator": st.session_state.calculator is not None,
+        "Chart Builder": st.session_state.chart_builder is not None,
+        "Portfolio Analyzer": st.session_state.portfolio_analyzer is not None,
+        "Data Persistence": st.session_state.data_persistence is not None,
+    }
+    
+    for component, status in session_info.items():
+        if status:
+            st.success(f"✅ {component}")
+        else:
+            st.error(f"❌ {component}")
+    
+    # System Information
+    st.subheader("💻 System Information")
+    
+    try:
+        import sys
+        import platform
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write(f"**Python Version:** {sys.version.split()[0]}")
+            st.write(f"**Platform:** {platform.system()} {platform.release()}")
+        
+        with col2:
+            # Check main dependencies
+            dependencies = {
+                "Pandas": pd.__version__,
+                "NumPy": np.__version__,
+                "Streamlit": st.__version__,
+            }
+            
+            for lib, version in dependencies.items():
+                st.write(f"**{lib}:** {version}")
+                
+    except Exception as e:
+        st.error(f"Error retrieving system information: {str(e)}")
+    
+    # Error Logs (if any)
+    st.subheader("⚠️ Recent Errors")
+    
+    # This would show recent errors if we had a logging system
+    st.info("No error logging system implemented. Errors appear directly in the interface.")
+    
+    # Clear Cache Options
+    st.subheader("🔄 Maintenance")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("Clear Session Cache"):
+            # Clear session state except data persistence
+            keys_to_keep = ['data_persistence']
+            keys_to_clear = [k for k in st.session_state.keys() if k not in keys_to_keep]
+            for key in keys_to_clear:
+                del st.session_state[key]
+            st.success("Session cache cleared")
+            st.rerun()
+    
+    with col2:
+        if st.button("Reload Carbon Data"):
+            if st.session_state.data_persistence.has_carbon_data():
+                carbon_data = st.session_state.data_persistence.load_carbon_data()
+                if carbon_data:
+                    st.session_state.calculator = CarbonCalculator(carbon_data)
+                    st.session_state.chart_builder = ChartBuilder()
+                    st.session_state.portfolio_analyzer = PortfolioAnalyzer(st.session_state.calculator)
+                    st.success("Carbon data reloaded")
+                    st.rerun()
+                else:
+                    st.error("Failed to reload carbon data")
+            else:
+                st.warning("No carbon data to reload")
+    
+    with col3:
+        if st.button("System Health Check"):
+            health_issues = []
+            
+            # Check if essential components are loaded
+            if st.session_state.calculator is None:
+                health_issues.append("❌ Carbon calculator not initialized")
+            
+            if not st.session_state.data_persistence:
+                health_issues.append("❌ Data persistence not available")
+            
+            portfolio_count = len(st.session_state.data_persistence.get_portfolio_names())
+            if portfolio_count == 0:
+                health_issues.append("⚠️ No portfolios in library")
+            
+            if not health_issues:
+                st.success("✅ System health: All OK")
+            else:
+                st.warning("System health issues found:")
+                for issue in health_issues:
+                    st.write(issue)
 
 # Footer
 st.markdown("---")

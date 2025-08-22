@@ -11,11 +11,15 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend Architecture
-The application uses Streamlit as the web framework, providing a clean dashboard interface with:
-- File upload functionality for Excel data sources
-- Interactive visualizations using Plotly for charts and graphs  
-- Sidebar controls for data input and company selection
+The application uses Streamlit as the web framework with a modern multi-tab interface featuring:
+- **Tab 1 - About**: Application overview, features explanation, and getting started guide
+- **Tab 2 - Data Upload**: Carbon data and portfolio file upload with persistent storage
+- **Tab 3 - Portfolio Analysis**: Individual company analysis and portfolio exposure tracking
+- **Tab 4 - Portfolio Library**: Complete portfolio management with create/update/delete operations
+- **Tab 5 - System Status**: Health monitoring, error messages, and maintenance tools
+- Interactive visualizations using Plotly for charts and graphs
 - Wide layout configuration optimized for data visualization
+- Persistent data storage across sessions
 
 ### Backend Architecture
 The system follows a modular architecture with three main processing classes:
