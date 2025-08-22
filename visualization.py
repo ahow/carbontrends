@@ -163,25 +163,35 @@ class ChartBuilder:
             if filtered_data.empty:
                 return pd.DataFrame()
             
-            # Get unique years and their representative values
+            # Get unique years and their representative values (use January value as representative)
             year_values = {}
             unique_years = sorted(filtered_data['year'].unique())
             
             for year in unique_years:
-                year_data = filtered_data[filtered_data['year'] == year]
-                # For annual data points, all months in a year should have the same value
-                # Use the first month's value (they should all be identical for annual data)
-                repr_value = year_data['monthly_emissions_attributed'].iloc[0]
-                year_values[year] = repr_value
+                # Get January data for this year as representative
+                jan_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['month'] == 1)]
+                if not jan_data.empty:
+                    year_values[year] = jan_data['monthly_emissions_attributed'].iloc[0]
+                else:
+                    # Fallback to any month if January not available
+                    year_data = filtered_data[filtered_data['year'] == year]
+                    year_values[year] = year_data['monthly_emissions_attributed'].iloc[0]
             
-            # Create step function points
+            if not year_values:
+                return pd.DataFrame()
+            
+            # Debug: Print values for troubleshooting
+            if quality_filter == 'estimated':
+                print(f"DEBUG: Estimated step values for chart: {year_values}")
+            
+            # Create step function points - only connect consecutive years
             step_points = []
+            sorted_years = sorted(year_values.keys())
             
-            for i, year in enumerate(unique_years):
+            for i, year in enumerate(sorted_years):
                 value = year_values[year]
                 
-                # Add points to create proper step function
-                # Start of year
+                # Add year start point
                 step_points.append({
                     'date': pd.Timestamp(year=year, month=1, day=1),
                     'monthly_emissions_attributed': value,
@@ -190,33 +200,20 @@ class ChartBuilder:
                     'data_quality': quality_filter
                 })
                 
-                # End of year (just before next year)
+                # Add year end point
                 step_points.append({
-                    'date': pd.Timestamp(year=year, month=12, day=31, hour=23, minute=59),
+                    'date': pd.Timestamp(year=year, month=12, day=31),
                     'monthly_emissions_attributed': value,
                     'year': year,
                     'month': 12,
                     'data_quality': quality_filter
                 })
-                
-                # Add gap if there's a next year to create proper step
-                if i < len(unique_years) - 1:
-                    next_year = unique_years[i + 1]
-                    next_value = year_values[next_year]
-                    
-                    # Add point at start of next year
-                    step_points.append({
-                        'date': pd.Timestamp(year=next_year, month=1, day=1),
-                        'monthly_emissions_attributed': next_value,
-                        'year': next_year,
-                        'month': 1,
-                        'data_quality': quality_filter
-                    })
             
             step_df = pd.DataFrame(step_points)
             return step_df.sort_values('date').reset_index(drop=True)
             
-        except Exception:
+        except Exception as e:
+            print(f"Error creating step function for {quality_filter}: {e}")
             return pd.DataFrame()
     
     def create_sector_comparison_chart(self, data: List[Dict[str, Any]]) -> Optional[go.Figure]:
