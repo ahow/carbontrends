@@ -169,8 +169,9 @@ class ChartBuilder:
             
             for year in unique_years:
                 year_data = filtered_data[filtered_data['year'] == year]
-                # Use the average value across all months for this year
-                repr_value = year_data['monthly_emissions_attributed'].mean()
+                # For annual data points, all months in a year should have the same value
+                # Use the first month's value (they should all be identical for annual data)
+                repr_value = year_data['monthly_emissions_attributed'].iloc[0]
                 year_values[year] = repr_value
             
             # Create step function points
