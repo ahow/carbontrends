@@ -133,25 +133,43 @@ class CarbonCalculator:
                 median_emission = np.median(emissions)
                 mad = np.median(np.abs(emissions - median_emission))  # Median Absolute Deviation
                 
-                # Flag values that are more than 5 MADs from median as extreme outliers
-                threshold = 5 * mad if mad > 0 else median_emission
+                # More aggressive outlier detection: flag values >3 MADs from median
+                threshold = 3 * mad if mad > 0 else median_emission * 0.1
                 outlier_mask = np.abs(emissions - median_emission) > threshold
                 
-                if outlier_mask.any() and threshold > 0:
-                    # Replace extreme outliers with capped values
+                # Also check for multiplicative outliers (>10x median)
+                multiplicative_outliers = emissions > (median_emission * 10)
+                outlier_mask = outlier_mask | multiplicative_outliers
+                
+                if outlier_mask.any():
+                    # Replace extreme outliers with more conservative values
                     for i, is_outlier in enumerate(outlier_mask):
                         if is_outlier:
-                            # Cap outlier to median ± 3*MAD for smoother interpolation
-                            max_allowed = median_emission + 3 * mad
-                            min_allowed = max(0, median_emission - 3 * mad)
-                            
                             original_value = emissions[i]
-                            capped_value = np.clip(original_value, min_allowed, max_allowed)
-                            annual_df.loc[i, 'annual_emissions_attributed'] = capped_value
                             
-                            # Mark as estimated if we modified it
-                            if abs(original_value - capped_value) / original_value > 0.1:  # >10% change
-                                annual_df.loc[i, 'data_quality'] = 'estimated'
+                            # For extreme outliers (>10x median), use interpolation from neighbors
+                            if original_value > median_emission * 10:
+                                # Use median or interpolate from neighbors
+                                neighbor_values = []
+                                if i > 0:
+                                    neighbor_values.append(emissions[i-1])
+                                if i < len(emissions) - 1:
+                                    neighbor_values.append(emissions[i+1])
+                                
+                                if neighbor_values:
+                                    capped_value = np.mean(neighbor_values)
+                                else:
+                                    capped_value = median_emission
+                            else:
+                                # Cap to median ± 2*MAD for moderate outliers
+                                max_allowed = median_emission + 2 * mad
+                                min_allowed = max(0, median_emission - 2 * mad)
+                                capped_value = np.clip(original_value, min_allowed, max_allowed)
+                            
+                            annual_df.loc[i, 'annual_emissions_attributed'] = capped_value
+                            annual_df.loc[i, 'data_quality'] = 'estimated'
+                            
+                            print(f"Outlier corrected for {company_name} year {annual_df.loc[i, 'year']}: {original_value:.0f} → {capped_value:.0f} tCO2e")
             
             # Generate smooth monthly data
             monthly_data = self._generate_monthly_smooth_data(annual_df)
