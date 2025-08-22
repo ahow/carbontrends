@@ -177,48 +177,69 @@ with tab2:
     # Process carbon data when file is uploaded
     if uploaded_file is not None:
         try:
-            with st.spinner("Processing carbon data..."):
-                # Initialize data processor
-                st.session_state.data_processor = DataProcessor()
+            # Initialize data processor
+            st.session_state.data_processor = DataProcessor()
+            
+            # Create progress indicators
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            status_text.text("Loading Excel file...")
+            progress_bar.progress(20)
+            
+            # Load and process data
+            data = st.session_state.data_processor.load_excel_data(uploaded_file)
+            
+            if data is not None:
+                status_text.text("Saving data...")
+                progress_bar.progress(60)
                 
-                # Load and process data
-                data = st.session_state.data_processor.load_excel_data(uploaded_file)
-                
-                if data is not None:
-                    # Save data persistently
-                    if st.session_state.data_persistence.save_carbon_data(data):
-                        st.success("✅ Carbon data saved successfully!")
+                # Save data persistently
+                if st.session_state.data_persistence.save_carbon_data(data):
+                    status_text.text("Initializing calculators...")
+                    progress_bar.progress(80)
                     
                     # Initialize calculator and chart builder
                     st.session_state.calculator = CarbonCalculator(data)
                     st.session_state.chart_builder = ChartBuilder()
                     st.session_state.portfolio_analyzer = PortfolioAnalyzer(st.session_state.calculator)
                     
-                    # Display data summary
-                    st.subheader("📈 Data Summary")
+                    progress_bar.progress(100)
+                    status_text.text("Complete!")
                     
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        companies_count = len(data['reference'])
-                        st.metric("Total Companies", companies_count)
-                    
-                    with col2:
-                        # Show data date range
-                        carbon_data = data['carbon']
-                        if not carbon_data.empty:
-                            years = [col for col in carbon_data.columns if str(col).isdigit()]
-                            if years:
-                                min_year, max_year = min(years), max(years)
-                                st.metric("Data Range", f"{min_year} - {max_year}")
-                    
-                    with col3:
-                        sheet_count = len([k for k in data.keys() if not data[k].empty])
-                        st.metric("Valid Sheets", sheet_count)
-                    
-                    st.rerun()
-                    
+                    st.success("✅ Carbon data processed and saved successfully!")
                 else:
-                    st.error("❌ Failed to load data. Please check your Excel file format.")
+                    st.error("❌ Failed to save carbon data")
+                
+                # Display data summary
+                st.subheader("📈 Data Summary")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    companies_count = len(data['reference'])
+                    st.metric("Total Companies", companies_count)
+                
+                with col2:
+                    # Show data date range
+                    carbon_data = data['carbon']
+                    if not carbon_data.empty:
+                        years = [col for col in carbon_data.columns if str(col).isdigit()]
+                        if years:
+                            min_year, max_year = min(years), max(years)
+                            st.metric("Data Range", f"{min_year} - {max_year}")
+                
+                with col3:
+                    sheet_count = len([k for k in data.keys() if not data[k].empty])
+                    st.metric("Valid Sheets", sheet_count)
+                
+                # Clear progress indicators
+                progress_bar.empty()
+                status_text.empty()
+                
+            else:
+                progress_bar.empty()
+                status_text.empty()
+                st.error("❌ Failed to process data. Please check the error messages above and ensure your Excel file contains the required sheets.")
                     
         except Exception as e:
             st.error(f"❌ Error processing file: {str(e)}")

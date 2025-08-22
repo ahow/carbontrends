@@ -33,26 +33,33 @@ class DataProcessor:
                 st.error(f"Missing required sheets: {', '.join(missing_sheets)}")
                 return None
             
-            # Process each sheet
+            # Process each sheet with error tolerance
             processed_data = {}
             
             # Process Reference sheet
             processed_data['reference'] = self._process_reference_sheet(excel_data['Reference'])
+            if processed_data['reference'].empty:
+                st.error("Reference sheet processing failed - no valid companies found")
+                return None
             
             # Process Carbon sheet
             processed_data['carbon'] = self._process_carbon_sheet(excel_data['Carbon'])
+            if processed_data['carbon'].empty:
+                st.error("Carbon sheet processing failed - no valid data found")
+                return None
             
             # Process Sales sheet
             processed_data['sales'] = self._process_sales_sheet(excel_data['Sales'])
             
-            # Process EV sheet
+            # Process EV sheet  
             processed_data['ev'] = self._process_ev_sheet(excel_data['EV'])
             
             # Validate data consistency
             if self._validate_data_consistency(processed_data):
                 return processed_data
             else:
-                return None
+                # Still return data even with warnings, as they're not critical
+                return processed_data
                 
         except Exception as e:
             st.error(f"Error loading Excel file: {str(e)}")
@@ -180,7 +187,7 @@ class DataProcessor:
                         continue
             
             if not year_columns:
-                st.warning(f"No valid year columns found in {sheet_name} sheet")
+                st.info(f"No year columns found in {sheet_name} sheet - this is optional")
                 return pd.DataFrame({'ISIN': []})
             
             # Convert year columns to numeric
@@ -220,13 +227,13 @@ class DataProcessor:
                 
                 # Find ISINs in reference but not in this sheet
                 missing_isins = reference_isins - sheet_isins
-                if missing_isins:
-                    st.warning(f"{sheet_name} sheet missing data for {len(missing_isins)} companies")
+                if missing_isins and len(missing_isins) < len(reference_isins):
+                    st.info(f"{sheet_name.title()} sheet has data for {len(sheet_isins)}/{len(reference_isins)} companies")
                 
                 # Find ISINs in this sheet but not in reference
                 extra_isins = sheet_isins - reference_isins
                 if extra_isins:
-                    st.warning(f"{sheet_name} sheet has data for {len(extra_isins)} companies not in Reference sheet")
+                    st.info(f"{sheet_name.title()} sheet has {len(extra_isins)} additional companies not in Reference")
             
             return True
             
