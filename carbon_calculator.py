@@ -283,6 +283,12 @@ class CarbonCalculator:
                     )
                     data_quality = 'estimated'
                 
+                # CRITICAL FIX: Ensure monthly_emissions is truly monthly
+                # Check if the value seems too high (likely annual instead of monthly)
+                if monthly_emissions > 1000:  # Threshold: values over 1000 tCO2e/month are likely annual
+                    st.warning(f"Large monthly emissions detected ({monthly_emissions:.0f}), converting from annual")
+                    monthly_emissions = monthly_emissions / 12
+                
                 monthly_data.append({
                     'year': year,
                     'month': month,
