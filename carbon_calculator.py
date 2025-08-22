@@ -189,7 +189,7 @@ class CarbonCalculator:
     
     def _estimate_carbon_emissions(self, target_year: int, carbon_data: Dict[str, float],
                                  sales_data: Dict[str, float], target_sales: Optional[float]) -> Optional[float]:
-        """Estimate carbon emissions for missing years."""
+        """Estimate carbon emissions for missing years using improved trend-based logic."""
         try:
             # If we have carbon data, interpolate/extrapolate
             if carbon_data:
@@ -201,18 +201,31 @@ class CarbonCalculator:
                     carbon_estimate = np.interp(target_year, years, values)
                     return max(float(carbon_estimate), 0.0)
                 elif len(years) == 1:
-                    # Use carbon intensity approach if sales data available
+                    # Improved estimation for single data point
                     single_year = years[0]
                     single_carbon = values[0]
                     
-                    if target_sales and target_sales > 0:
-                        single_sales = sales_data.get(str(single_year))
-                        if single_sales and single_sales > 0:
-                            carbon_intensity = single_carbon / single_sales
-                            return carbon_intensity * target_sales
+                    # For historical years (before first data point), use conservative approach
+                    if target_year < single_year:
+                        # Assume historical emissions were higher due to less efficient technology
+                        # Use moderate increase: 2-3% per year going backward
+                        years_back = single_year - target_year
+                        historical_multiplier = 1 + (0.025 * years_back)  # 2.5% increase per year back
+                        historical_estimate = single_carbon * historical_multiplier
+                        
+                        # But cap it to avoid unrealistic values (max 2x the known value)
+                        return min(historical_estimate, single_carbon * 2.0)
                     
-                    # Otherwise use the single value
-                    return single_carbon
+                    # For future years (after first data point), assume improvement
+                    elif target_year > single_year:
+                        # Assume emissions decrease due to efficiency improvements
+                        years_forward = target_year - single_year
+                        future_multiplier = max(0.5, 1 - (0.02 * years_forward))  # 2% decrease per year, min 50%
+                        return single_carbon * future_multiplier
+                    
+                    # For the same year, return the value
+                    else:
+                        return single_carbon
             
             # If no carbon data but have sales data, use industry average intensity
             if target_sales and target_sales > 0:
