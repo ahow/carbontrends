@@ -330,13 +330,24 @@ class CarbonCalculator:
             dates_numeric = [d.timestamp() for d in annual_dates]
             emissions_values = annual_df['annual_emissions_attributed'].to_numpy()
             
-            # Use cubic spline interpolation
+            # Use improved interpolation that prevents unrealistic spikes
             if len(dates_numeric) >= 4:
-                # Cubic spline
-                f = interpolate.CubicSpline(dates_numeric, emissions_values, bc_type='natural')
+                # Use cubic spline with constraints to prevent spikes
+                f = interpolate.CubicSpline(dates_numeric, emissions_values, bc_type='clamped')
                 interpolated_annual = f(target_numeric)
+                
+                # Apply spike prevention: cap values to reasonable range
+                min_value = min(emissions_values)
+                max_value = max(emissions_values)
+                value_range = max_value - min_value
+                
+                # Don't allow interpolation to exceed 150% of the range
+                safe_max = max_value + (0.5 * value_range)
+                safe_min = max(0, min_value - (0.2 * value_range))
+                
+                interpolated_annual = np.clip(interpolated_annual, safe_min, safe_max)
             else:
-                # Linear interpolation
+                # Linear interpolation for fewer data points
                 interpolated_annual = np.interp(target_numeric, dates_numeric, emissions_values)
             
             # Convert to monthly equivalent
