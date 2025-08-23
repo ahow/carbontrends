@@ -305,7 +305,7 @@ class CarbonCalculator:
             return None
     
     def _generate_monthly_smooth_data(self, annual_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate smooth monthly data from annual data points."""
+        """Generate smooth monthly data from annual data points with annual consistency."""
         try:
             # Extend date range for smoother interpolation
             min_year = annual_df['year'].min()
@@ -324,13 +324,12 @@ class CarbonCalculator:
                 freq='MS'
             )
             
-            # Prepare annual data for interpolation (using mid-year dates)
-            annual_dates = [pd.Timestamp(year=int(row['year']), month=6, day=15) for _, row in annual_df.iterrows()]
+            # First pass: Create smooth annual curve for interpolation
+            annual_curve = self._create_smooth_annual_curve(annual_df, min_year, max_year)
             
-            # Create interpolation functions
             monthly_data = []
             
-            for i, date in enumerate(monthly_dates):
+            for date in monthly_dates:
                 year = date.year
                 month = date.month
                 
@@ -338,34 +337,30 @@ class CarbonCalculator:
                 annual_row = annual_df[annual_df['year'] == year]
                 
                 if not annual_row.empty:
-                    # Use actual annual data
+                    # For reported years, ensure monthly values sum to annual total
                     row_data = annual_row.iloc[0]
                     ownership_pct = row_data['ownership_percentage']
                     ev = row_data['enterprise_value']
                     data_quality = row_data['data_quality']
                     
-                    # Calculate monthly emissions using smooth interpolation
-                    monthly_emissions = self._interpolate_smooth_emissions(
-                        date, annual_df, annual_dates
-                    )
+                    if data_quality == 'reported':
+                        # Distribute annual value evenly across 12 months for reported data
+                        monthly_emissions = row_data['annual_emissions_attributed'] / 12
+                    else:
+                        # Use smooth interpolation for estimated years
+                        monthly_emissions = annual_curve.get(year, 0) / 12
                     
                 else:
                     # Interpolate/extrapolate for missing years
-                    ownership_pct = self._interpolate_value(
-                        date, annual_dates, annual_df['ownership_percentage'].to_numpy()
-                    )
-                    ev = self._interpolate_value(
-                        date, annual_dates, annual_df['enterprise_value'].to_numpy()
-                    )
-                    monthly_emissions = self._interpolate_smooth_emissions(
-                        date, annual_df, annual_dates
-                    )
+                    # Use smooth curve and interpolate other values
+                    years_list = sorted(annual_df['year'].tolist())
+                    ownership_values = annual_df['ownership_percentage'].to_numpy()
+                    ev_values = annual_df['enterprise_value'].to_numpy()
+                    
+                    ownership_pct = np.interp(year, years_list, ownership_values)
+                    ev = np.interp(year, years_list, ev_values)
+                    monthly_emissions = annual_curve.get(year, 0) / 12
                     data_quality = 'estimated'
-                
-                # Ensure monthly_emissions is truly monthly (safety check for large values)
-                # Values over 1000 tCO2e/month are likely annual values that need conversion
-                if monthly_emissions > 1000:
-                    monthly_emissions = monthly_emissions / 12
                 
                 monthly_data.append({
                     'year': year,
@@ -383,84 +378,90 @@ class CarbonCalculator:
             st.error(f"Error generating monthly data: {str(e)}")
             return pd.DataFrame()
     
-    def _interpolate_smooth_emissions(self, target_date: pd.Timestamp, 
-                                    annual_df: pd.DataFrame, annual_dates: List[pd.Timestamp]) -> float:
-        """Interpolate emissions with quality-aware smoothing to prevent unrealistic spikes."""
+    def _create_smooth_annual_curve(self, annual_df: pd.DataFrame, min_year: int, max_year: int) -> Dict[int, float]:
+        """Create a smooth annual emissions curve that preserves reported values and smoothly interpolates."""
         try:
-            if len(annual_dates) == 1:
-                # Single data point - return monthly equivalent
-                return annual_df.iloc[0]['annual_emissions_attributed'] / 12
+            # Separate reported and estimated data
+            reported_data = annual_df[annual_df['data_quality'] == 'reported'].copy()
             
-            # Convert dates to numeric for interpolation
-            target_numeric = target_date.timestamp()
-            dates_numeric = [d.timestamp() for d in annual_dates]
-            emissions_values = annual_df['annual_emissions_attributed'].to_numpy()
-            data_qualities = annual_df['data_quality'].tolist()
+            # Create year range
+            all_years = list(range(min_year, max_year + 1))
+            annual_curve = {}
             
-            # Find the closest data points to avoid cross-quality interpolation spikes
-            target_year = target_date.year
-            closest_indices = []
-            
-            # Find data points within reasonable range (±3 years) with similar quality
-            for i, date in enumerate(annual_dates):
-                year_diff = abs(date.year - target_year)
-                if year_diff <= 3:
-                    closest_indices.append(i)
-            
-            # If we have good local data, use only those points for interpolation
-            if len(closest_indices) >= 2:
-                local_dates = [dates_numeric[i] for i in closest_indices]
-                local_values = [emissions_values[i] for i in closest_indices]
+            if len(reported_data) == 0:
+                # No reported data, use simple interpolation
+                years = annual_df['year'].tolist()
+                values = annual_df['annual_emissions_attributed'].tolist()
                 
-                # Use linear interpolation with local data to prevent spikes
-                interpolated_annual = np.interp(target_numeric, local_dates, local_values)
-            elif len(dates_numeric) >= 4:
-                # Use constrained cubic spline with strict limits
-                f = interpolate.CubicSpline(dates_numeric, emissions_values, bc_type='clamped')
-                interpolated_annual = f(target_numeric)
+                for year in all_years:
+                    annual_curve[year] = np.interp(year, years, values)
+                    
+            elif len(reported_data) == 1:
+                # Single reported value - extend with gentle trend
+                single_year = reported_data.iloc[0]['year']
+                single_value = reported_data.iloc[0]['annual_emissions_attributed']
                 
-                # Apply very strict spike prevention
-                min_value = min(emissions_values)
-                max_value = max(emissions_values)
-                median_value = np.median(emissions_values)
-                
-                # Cap at median ± 50% of range to prevent extreme spikes
-                value_range = max_value - min_value
-                safe_max = median_value + (0.3 * value_range)
-                safe_min = max(0, median_value - (0.3 * value_range))
-                
-                interpolated_annual = np.clip(interpolated_annual, safe_min, safe_max)
+                for year in all_years:
+                    if year == single_year:
+                        annual_curve[year] = single_value
+                    else:
+                        # Apply gentle 2% annual decline for future, 2% annual increase for past
+                        year_diff = year - single_year
+                        if year_diff > 0:
+                            # Future years - gradual improvement
+                            factor = (0.98 ** year_diff)
+                        else:
+                            # Past years - assume higher emissions
+                            factor = (1.02 ** abs(year_diff))
+                        annual_curve[year] = single_value * factor
+                        
             else:
-                # Linear interpolation for fewer data points
-                interpolated_annual = np.interp(target_numeric, dates_numeric, emissions_values)
+                # Multiple reported points - use smooth interpolation while preserving reported values
+                reported_years = reported_data['year'].tolist()
+                reported_values = reported_data['annual_emissions_attributed'].tolist()
+                
+                # Use cubic spline for smooth interpolation between reported points
+                if len(reported_years) >= 3:
+                    # Constrained cubic spline to prevent oscillations
+                    f = interpolate.PchipInterpolator(reported_years, reported_values)
+                    
+                    for year in all_years:
+                        if year in reported_years:
+                            # Preserve exact reported values
+                            idx = reported_years.index(year)
+                            annual_curve[year] = reported_values[idx]
+                        else:
+                            # Smooth interpolation/extrapolation
+                            interpolated = f(year)
+                            
+                            # Apply bounds based on reported data range
+                            min_reported = min(reported_values)
+                            max_reported = max(reported_values)
+                            median_reported = np.median(reported_values)
+                            
+                            # Allow reasonable extrapolation but prevent extreme values
+                            range_buffer = (max_reported - min_reported) * 0.5
+                            safe_min = max(0, min_reported - range_buffer)
+                            safe_max = max_reported + range_buffer
+                            
+                            annual_curve[year] = np.clip(interpolated, safe_min, safe_max)
+                else:
+                    # Linear interpolation for 2 points
+                    for year in all_years:
+                        if year in reported_years:
+                            idx = reported_years.index(year)
+                            annual_curve[year] = reported_values[idx]
+                        else:
+                            annual_curve[year] = np.interp(year, reported_years, reported_values)
             
-            # Convert to monthly equivalent
-            monthly_emissions = max(0.0, float(interpolated_annual) / 12.0)
+            return annual_curve
             
-            return monthly_emissions
-            
-        except Exception:
-            # Fallback to simple average
-            mean_emissions = annual_df['annual_emissions_attributed'].mean()
-            return mean_emissions / 12 if mean_emissions > 0 else 0
-    
-    def _interpolate_value(self, target_date: pd.Timestamp, 
-                          annual_dates: List[pd.Timestamp], values: np.ndarray) -> float:
-        """Generic interpolation function for non-emissions values."""
-        try:
-            if len(annual_dates) == 1:
-                return values[0]
-            
-            target_numeric = target_date.timestamp()
-            dates_numeric = [d.timestamp() for d in annual_dates]
-            
-            # Linear interpolation
-            interpolated_value = np.interp(target_numeric, dates_numeric, values)
-            
-            return max(0.0, float(interpolated_value))
-            
-        except Exception:
-            return float(np.mean(values)) if len(values) > 0 else 0.0
+        except Exception as e:
+            st.error(f"Error creating smooth curve: {str(e)}")
+            # Fallback to simple interpolation
+            years = annual_df['year'].tolist()
+            values = annual_df['annual_emissions_attributed'].tolist()
+            return {year: np.interp(year, years, values) for year in range(min_year, max_year + 1)}
     
     def _estimate_missing_intensities(self, intensity_data: Dict, company_name: str) -> None:
         """Estimate missing carbon intensities using temporal interpolation."""
