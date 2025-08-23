@@ -184,7 +184,7 @@ class PortfolioAnalyzer:
     
     def _calculate_carbon_change(self, attribution_data: pd.DataFrame,
                                start_date: datetime, end_date: datetime) -> Optional[float]:
-        """Calculate carbon intensity change between two dates."""
+        """Calculate carbon intensity change between two dates for $1M investment."""
         try:
             # Convert dates to monthly data points
             start_month = pd.Timestamp(year=start_date.year, month=start_date.month, day=1)
@@ -204,17 +204,28 @@ class PortfolioAnalyzer:
                     attribution_data, start_month, end_month
                 )
             
-            start_emissions = start_data.iloc[0]['monthly_emissions_attributed']
-            end_emissions = end_data.iloc[0]['monthly_emissions_attributed']
+            # Calculate carbon intensity change (emissions per EV) rather than attributed emissions
+            start_row = start_data.iloc[0]
+            end_row = end_data.iloc[0]
             
-            return end_emissions - start_emissions
+            # Calculate carbon intensity (emissions per dollar of enterprise value)
+            start_intensity = start_row['monthly_emissions_attributed'] / start_row['ownership_percentage']
+            end_intensity = end_row['monthly_emissions_attributed'] / end_row['ownership_percentage']
+            
+            # Convert to carbon intensity per dollar
+            start_carbon_per_dollar = start_intensity / start_row['enterprise_value']
+            end_carbon_per_dollar = end_intensity / end_row['enterprise_value']
+            
+            # Calculate change for $1M investment
+            intensity_change = end_carbon_per_dollar - start_carbon_per_dollar
+            return intensity_change * 1000000  # Convert to per $1M
             
         except Exception:
             return None
     
     def _interpolate_carbon_change(self, attribution_data: pd.DataFrame,
                                  start_date: pd.Timestamp, end_date: pd.Timestamp) -> Optional[float]:
-        """Interpolate carbon emissions for missing dates."""
+        """Interpolate carbon intensity change for missing dates."""
         try:
             # Sort data by date
             data_sorted = attribution_data.sort_values('date')
@@ -222,17 +233,25 @@ class PortfolioAnalyzer:
             if len(data_sorted) < 2:
                 return None
             
-            # Interpolate emissions at start and end dates
+            # Calculate carbon intensity per dollar for each data point
+            carbon_intensities = []
+            for _, row in data_sorted.iterrows():
+                total_emissions = row['monthly_emissions_attributed'] / row['ownership_percentage']
+                intensity_per_dollar = total_emissions / row['enterprise_value']
+                carbon_intensities.append(intensity_per_dollar)
+            
+            # Interpolate intensities at start and end dates
             dates_numeric = data_sorted['date'].astype(np.int64)
-            emissions = data_sorted['monthly_emissions_attributed'].values
             
             start_numeric = start_date.value
             end_numeric = end_date.value
             
-            start_emissions = np.interp(start_numeric, dates_numeric, emissions)
-            end_emissions = np.interp(end_numeric, dates_numeric, emissions)
+            start_intensity = np.interp(start_numeric, dates_numeric, carbon_intensities)
+            end_intensity = np.interp(end_numeric, dates_numeric, carbon_intensities)
             
-            return end_emissions - start_emissions
+            # Calculate change for $1M investment
+            intensity_change = end_intensity - start_intensity
+            return intensity_change * 1000000  # Convert to per $1M
             
         except Exception:
             return None
