@@ -11,11 +11,11 @@ class ChartBuilder:
     
     def __init__(self):
         self.color_palette = {
-            'smooth_trend': '#2E8B57',  # Sea Green
-            'reported_data': '#1f77b4',  # Blue
-            'estimated_data': '#808080',  # Gray
+            'smooth_trend': '#2ecc71',   # Bright green like the reference
+            'reported_data': '#3498db',  # Blue for reported steps
+            'estimated_data': '#95a5a6', # Gray for estimated steps
             'background': '#ffffff',
-            'grid': '#e0e0e0'
+            'grid': '#f8f9fa'
         }
     
     def create_attribution_chart(self, data: pd.DataFrame, company_name: str, 
@@ -42,28 +42,29 @@ class ChartBuilder:
             # Create figure
             fig = go.Figure()
             
-            # Add smooth monthly trend line
+            # Add smooth monthly trend line (like the green line in reference)
             fig.add_trace(go.Scatter(
                 x=data_sorted['date'],
                 y=data_sorted['monthly_emissions_attributed'],
                 mode='lines',
-                name='Monthly Smooth Trend',
-                line=dict(color=self.color_palette['smooth_trend'], width=3),
+                name='Monthly Attribution (Smooth)',
+                line=dict(color=self.color_palette['smooth_trend'], width=2.5, smoothing=1.3),
                 hovertemplate='<b>%{x|%Y-%m}</b><br>' +
                             'Monthly Attribution: %{y:.1f} tCO₂e<br>' +
                             '<extra></extra>',
                 showlegend=True
             ))
             
-            # Add annual reported data points as step functions
+            # Add annual reported data points as step functions (like blue steps in reference)
             reported_data = self._get_annual_points(data_sorted, 'reported')
             if not reported_data.empty:
                 fig.add_trace(go.Scatter(
                     x=reported_data['date'],
                     y=reported_data['monthly_emissions_attributed'],
-                    mode='lines',
+                    mode='lines+markers',
                     name='Annual Reported Data (Steps)',
                     line=dict(color=self.color_palette['reported_data'], width=2, shape='hv'),
+                    marker=dict(color=self.color_palette['reported_data'], size=6, symbol='circle'),
                     connectgaps=False,
                     hovertemplate='<b>%{x|%Y-%m}</b><br>' +
                                 'Annual Data: %{y:.1f} tCO₂e/month<br>' +
@@ -78,22 +79,28 @@ class ChartBuilder:
                 # Create separate traces for each continuous estimated period to avoid connecting across gaps
                 self._add_estimated_traces(fig, estimated_data)
             
-            # Update layout
+            # Update layout to match reference style
+            title_html = f"""
+            <b style="font-size: 16px; color: #2c3e50;">Carbon Attribution Over Time</b><br>
+            <span style="font-size: 12px; color: #7f8c8d;">Monthly carbon emissions attributable to ${investment_amount/1e6:.1f}M investment (smoothed trend)</span>
+            """
+            
             fig.update_layout(
                 title=dict(
-                    text=f"Carbon Attribution for ${investment_amount/1e6:.1f}M Investment in {company_name}",
-                    x=0.5,
-                    font=dict(size=16, color='#2c3e50')
+                    text=title_html,
+                    x=0.02,  # Left align like reference
+                    y=0.95,
+                    font=dict(size=14)
                 ),
                 xaxis=dict(
-                    title="Date",
+                    title="Year",
                     showgrid=True,
                     gridcolor=self.color_palette['grid'],
-                    tickformat='%Y-%m',
-                    dtick='M6'  # Show ticks every 6 months
+                    tickformat='%Y',
+                    dtick='M12'  # Show ticks every year like the reference
                 ),
                 yaxis=dict(
-                    title="Monthly Carbon Attribution (tCO₂e)",
+                    title="Monthly carbon emissions attributable to $1M investment (tCO₂e)",
                     showgrid=True,
                     gridcolor=self.color_palette['grid'],
                     tickformat='.1f'
@@ -104,10 +111,11 @@ class ChartBuilder:
                 hovermode='x unified',
                 legend=dict(
                     x=0.02,
-                    y=0.98,
-                    bgcolor='rgba(255,255,255,0.8)',
-                    bordercolor='rgba(0,0,0,0.2)',
-                    borderwidth=1
+                    y=0.85,  # Position below title like reference
+                    bgcolor='rgba(255,255,255,0.9)',
+                    bordercolor='rgba(0,0,0,0.1)',
+                    borderwidth=1,
+                    font=dict(size=11)
                 ),
                 height=500
             )

@@ -324,43 +324,37 @@ class CarbonCalculator:
                 freq='MS'
             )
             
-            # First pass: Create smooth annual curve for interpolation
-            annual_curve = self._create_smooth_annual_curve(annual_df, min_year, max_year)
+            # Create smooth monthly curve
+            monthly_curve = self._create_smooth_monthly_curve(annual_df, min_year, max_year)
             
             monthly_data = []
             
             for date in monthly_dates:
                 year = date.year
                 month = date.month
+                month_key = f"{year}-{month:02d}"
                 
                 # Find corresponding annual data
                 annual_row = annual_df[annual_df['year'] == year]
                 
                 if not annual_row.empty:
-                    # For reported years, ensure monthly values sum to annual total
+                    # Use actual annual data for ownership and EV
                     row_data = annual_row.iloc[0]
                     ownership_pct = row_data['ownership_percentage']
                     ev = row_data['enterprise_value']
                     data_quality = row_data['data_quality']
-                    
-                    if data_quality == 'reported':
-                        # Distribute annual value evenly across 12 months for reported data
-                        monthly_emissions = row_data['annual_emissions_attributed'] / 12
-                    else:
-                        # Use smooth interpolation for estimated years
-                        monthly_emissions = annual_curve.get(year, 0) / 12
-                    
                 else:
                     # Interpolate/extrapolate for missing years
-                    # Use smooth curve and interpolate other values
                     years_list = sorted(annual_df['year'].tolist())
                     ownership_values = annual_df['ownership_percentage'].to_numpy()
                     ev_values = annual_df['enterprise_value'].to_numpy()
                     
                     ownership_pct = np.interp(year, years_list, ownership_values)
                     ev = np.interp(year, years_list, ev_values)
-                    monthly_emissions = annual_curve.get(year, 0) / 12
                     data_quality = 'estimated'
+                
+                # Get smooth monthly emissions
+                monthly_emissions = monthly_curve.get(month_key, 0)
                 
                 monthly_data.append({
                     'year': year,
@@ -378,90 +372,100 @@ class CarbonCalculator:
             st.error(f"Error generating monthly data: {str(e)}")
             return pd.DataFrame()
     
-    def _create_smooth_annual_curve(self, annual_df: pd.DataFrame, min_year: int, max_year: int) -> Dict[int, float]:
-        """Create a smooth annual emissions curve that preserves reported values and smoothly interpolates."""
+    def _create_smooth_monthly_curve(self, annual_df: pd.DataFrame, min_year: int, max_year: int) -> Dict[str, float]:
+        """Create a smooth monthly emissions curve that preserves annual totals and provides natural trends."""
         try:
+            # Create monthly date range
+            monthly_dates = pd.date_range(
+                start=f'{min_year}-01-01',
+                end=f'{max_year}-12-01',
+                freq='MS'
+            )
+            
             # Separate reported and estimated data
             reported_data = annual_df[annual_df['data_quality'] == 'reported'].copy()
+            all_data = annual_df.copy()
             
-            # Create year range
-            all_years = list(range(min_year, max_year + 1))
-            annual_curve = {}
+            monthly_curve = {}
             
-            if len(reported_data) == 0:
-                # No reported data, use simple interpolation
-                years = annual_df['year'].tolist()
-                values = annual_df['annual_emissions_attributed'].tolist()
-                
-                for year in all_years:
-                    annual_curve[year] = np.interp(year, years, values)
+            if len(all_data) == 1:
+                # Single data point - flat monthly distribution
+                single_value = all_data.iloc[0]['annual_emissions_attributed']
+                monthly_value = single_value / 12
+                for date in monthly_dates:
+                    key = f"{date.year}-{date.month:02d}"
+                    monthly_curve[key] = monthly_value
                     
-            elif len(reported_data) == 1:
-                # Single reported value - extend with gentle trend
-                single_year = reported_data.iloc[0]['year']
-                single_value = reported_data.iloc[0]['annual_emissions_attributed']
-                
-                for year in all_years:
-                    if year == single_year:
-                        annual_curve[year] = single_value
-                    else:
-                        # Apply gentle 2% annual decline for future, 2% annual increase for past
-                        year_diff = year - single_year
-                        if year_diff > 0:
-                            # Future years - gradual improvement
-                            factor = (0.98 ** year_diff)
-                        else:
-                            # Past years - assume higher emissions
-                            factor = (1.02 ** abs(year_diff))
-                        annual_curve[year] = single_value * factor
-                        
             else:
-                # Multiple reported points - use smooth interpolation while preserving reported values
-                reported_years = reported_data['year'].tolist()
-                reported_values = reported_data['annual_emissions_attributed'].tolist()
+                # Multiple data points - create smooth spline through annual midpoints
+                annual_years = all_data['year'].tolist()
+                annual_values = all_data['annual_emissions_attributed'].tolist()
                 
-                # Use cubic spline for smooth interpolation between reported points
-                if len(reported_years) >= 3:
-                    # Constrained cubic spline to prevent oscillations
-                    f = interpolate.PchipInterpolator(reported_years, reported_values)
-                    
-                    for year in all_years:
-                        if year in reported_years:
-                            # Preserve exact reported values
-                            idx = reported_years.index(year)
-                            annual_curve[year] = reported_values[idx]
-                        else:
-                            # Smooth interpolation/extrapolation
-                            interpolated = f(year)
-                            
-                            # Apply bounds based on reported data range
-                            min_reported = min(reported_values)
-                            max_reported = max(reported_values)
-                            median_reported = np.median(reported_values)
-                            
-                            # Allow reasonable extrapolation but prevent extreme values
-                            range_buffer = (max_reported - min_reported) * 0.5
-                            safe_min = max(0, min_reported - range_buffer)
-                            safe_max = max_reported + range_buffer
-                            
-                            annual_curve[year] = np.clip(interpolated, safe_min, safe_max)
+                # Create midpoint dates for annual data (July 1st)
+                annual_midpoints = [pd.Timestamp(year=year, month=7, day=1) for year in annual_years]
+                annual_timestamps = [date.timestamp() for date in annual_midpoints]
+                
+                # Use PCHIP interpolator for smooth, monotonic curves
+                if len(annual_years) >= 3:
+                    f = interpolate.PchipInterpolator(annual_timestamps, annual_values)
                 else:
                     # Linear interpolation for 2 points
-                    for year in all_years:
-                        if year in reported_years:
-                            idx = reported_years.index(year)
-                            annual_curve[year] = reported_values[idx]
-                        else:
-                            annual_curve[year] = np.interp(year, reported_years, reported_values)
+                    f = interpolate.interp1d(annual_timestamps, annual_values, 
+                                           kind='linear', fill_value='extrapolate')
+                
+                # Generate smooth monthly values
+                for date in monthly_dates:
+                    month_timestamp = date.timestamp()
+                    
+                    # Get smooth interpolated annual value for this time point
+                    smooth_annual = float(f(month_timestamp))
+                    
+                    # Apply constraints to prevent unrealistic values
+                    min_annual = min(annual_values)
+                    max_annual = max(annual_values)
+                    value_range = max_annual - min_annual
+                    
+                    # Allow some extrapolation but within reasonable bounds
+                    safe_min = max(0, min_annual - 0.3 * value_range)
+                    safe_max = max_annual + 0.3 * value_range
+                    smooth_annual = np.clip(smooth_annual, safe_min, safe_max)
+                    
+                    # Convert to monthly value
+                    monthly_value = smooth_annual / 12
+                    
+                    key = f"{date.year}-{date.month:02d}"
+                    monthly_curve[key] = monthly_value
+                
+                # Ensure reported years sum to exact annual totals
+                for _, row in reported_data.iterrows():
+                    year = int(row['year'])
+                    target_annual = row['annual_emissions_attributed']
+                    
+                    # Get current monthly sum for this year
+                    year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
+                    current_sum = sum(monthly_curve.get(key, 0) for key in year_keys)
+                    
+                    if current_sum > 0:
+                        # Scale monthly values to match exact annual total
+                        adjustment_factor = target_annual / current_sum
+                        for key in year_keys:
+                            if key in monthly_curve:
+                                monthly_curve[key] *= adjustment_factor
             
-            return annual_curve
+            return monthly_curve
             
         except Exception as e:
-            st.error(f"Error creating smooth curve: {str(e)}")
-            # Fallback to simple interpolation
-            years = annual_df['year'].tolist()
-            values = annual_df['annual_emissions_attributed'].tolist()
-            return {year: np.interp(year, years, values) for year in range(min_year, max_year + 1)}
+            st.error(f"Error creating smooth monthly curve: {str(e)}")
+            # Fallback to simple annual distribution
+            monthly_curve = {}
+            for date in pd.date_range(start=f'{min_year}-01-01', end=f'{max_year}-12-01', freq='MS'):
+                # Simple linear interpolation fallback
+                year = date.year
+                annual_value = np.interp(year, annual_df['year'].tolist(), 
+                                       annual_df['annual_emissions_attributed'].tolist())
+                key = f"{year}-{date.month:02d}"
+                monthly_curve[key] = annual_value / 12
+            return monthly_curve
     
     def _estimate_missing_intensities(self, intensity_data: Dict, company_name: str) -> None:
         """Estimate missing carbon intensities using temporal interpolation."""
