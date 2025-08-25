@@ -444,36 +444,58 @@ class CarbonCalculator:
                 year = int(row['year'])
                 annual_targets[year] = row['annual_emissions_attributed']
             
-            # For each year, calculate adjustment factor
-            for year in range(min_year, max_year + 1):
-                if year not in annual_targets:
-                    continue
-                    
-                target_annual = annual_targets[year]
+            # For each year with data, calculate adjustment factor
+            for year, target_annual in annual_targets.items():
                 year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
                 
-                # Calculate current sum for this year
-                current_sum = sum(raw_monthly_values.get(key, 0) for key in year_keys if key in raw_monthly_values)
+                # Get all monthly values for this year from raw monthly values
+                year_monthly_values = []
+                valid_keys = []
+                for key in year_keys:
+                    if key in raw_monthly_values:
+                        year_monthly_values.append(raw_monthly_values[key])
+                        valid_keys.append(key)
                 
-                if current_sum > 0:
-                    # Calculate adjustment factor to match target annual sum
-                    adjustment_factor = target_annual / current_sum
+                if len(year_monthly_values) > 0:
+                    # Calculate current sum for this year
+                    current_sum = sum(year_monthly_values)
                     
-                    # Apply adjustment while preserving the smooth shape
-                    for key in year_keys:
-                        if key in raw_monthly_values:
+                    if current_sum > 0:
+                        # Calculate adjustment factor to match target annual sum
+                        adjustment_factor = target_annual / current_sum
+                        
+                        # Apply adjustment while preserving the smooth shape
+                        for key in valid_keys:
                             monthly_curve[key] = raw_monthly_values[key] * adjustment_factor
+                            
+                        # Debug: Print adjustment info
+                        print(f"Year {year}: target={target_annual:.2f}, raw_sum={current_sum:.2f}, factor={adjustment_factor:.3f}")
+                    else:
+                        # Fallback: distribute evenly if current sum is zero
+                        monthly_value = target_annual / 12
+                        for key in year_keys:
+                            monthly_curve[key] = monthly_value
+                        print(f"Year {year}: fallback distribution, monthly={monthly_value:.2f}")
                 else:
-                    # Fallback: distribute evenly if current sum is zero
+                    # No monthly data found, distribute evenly
                     monthly_value = target_annual / 12
                     for key in year_keys:
                         monthly_curve[key] = monthly_value
+                    print(f"Year {year}: no monthly data, even distribution, monthly={monthly_value:.2f}")
             
-            # Step 4: Fill in any missing months with interpolated values
+            # Step 4: Ensure all months are covered (don't override adjusted values)
+            # Only fill months for years that don't have annual targets
             for date in monthly_dates:
                 key = f"{date.year}-{date.month:02d}"
-                if key not in monthly_curve and key in raw_monthly_values:
-                    monthly_curve[key] = raw_monthly_values[key]
+                year = date.year
+                if key not in monthly_curve:
+                    if year in annual_targets:
+                        # This should not happen if Step 3 worked correctly
+                        # Use even distribution as fallback
+                        monthly_curve[key] = annual_targets[year] / 12
+                    elif key in raw_monthly_values:
+                        # For years without targets, use raw interpolated values
+                        monthly_curve[key] = raw_monthly_values[key]
             
             return monthly_curve
             
