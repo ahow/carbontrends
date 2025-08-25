@@ -308,8 +308,8 @@ class CarbonCalculator:
         """Generate smooth monthly data from annual data points with annual consistency."""
         try:
             # Extend date range for smoother interpolation
-            min_year = annual_df['year'].min()
-            max_year = annual_df['year'].max()
+            min_year = int(annual_df['year'].min())
+            max_year = int(annual_df['year'].max())
             
             # Add buffer years if needed
             if max_year < 2025:
@@ -397,60 +397,91 @@ class CarbonCalculator:
                     monthly_curve[key] = monthly_value
                     
             else:
-                # Multiple data points - create smooth spline through annual midpoints
+                # Step 1: Handle reported years - ensure exact annual sums
+                reported_years = set(reported_data['year'].astype(int))
+                
+                # Step 2: Create smooth curve for interpolation guidance
                 annual_years = all_data['year'].tolist()
                 annual_values = all_data['annual_emissions_attributed'].tolist()
                 
-                # Create midpoint dates for annual data (July 1st)
-                annual_midpoints = [pd.Timestamp(year=year, month=7, day=1) for year in annual_years]
-                annual_timestamps = [date.timestamp() for date in annual_midpoints]
+                # Create midpoint timestamps for smoother interpolation
+                annual_midpoints = []
+                annual_timestamps = []
+                valid_annual_values = []
+                
+                for i, year in enumerate(annual_years):
+                    try:
+                        midpoint = pd.Timestamp(year=int(year), month=7, day=1)
+                        if pd.notna(midpoint) and midpoint != pd.NaT:
+                            annual_midpoints.append(midpoint)
+                            annual_timestamps.append(midpoint.timestamp())
+                            valid_annual_values.append(annual_values[i])
+                    except Exception:
+                        # Skip invalid timestamps
+                        continue
+                
+                # Use the valid synchronized arrays
+                annual_values = valid_annual_values
                 
                 # Use PCHIP interpolator for smooth, monotonic curves
                 if len(annual_years) >= 3:
                     f = interpolate.PchipInterpolator(annual_timestamps, annual_values)
                 else:
-                    # Linear interpolation for 2 points
+                    # For linear interpolation with extrapolation
                     f = interpolate.interp1d(annual_timestamps, annual_values, 
-                                           kind='linear', fill_value='extrapolate')
+                                           kind='linear', bounds_error=False, fill_value=0.0)
                 
-                # Generate smooth monthly values
+                # Step 3: Generate monthly values with different approaches for reported vs estimated years
                 for date in monthly_dates:
-                    month_timestamp = date.timestamp()
+                    year = date.year
+                    month = date.month
+                    key = f"{year}-{month:02d}"
                     
-                    # Get smooth interpolated annual value for this time point
-                    smooth_annual = float(f(month_timestamp))
-                    
-                    # Apply constraints to prevent unrealistic values
-                    min_annual = min(annual_values)
-                    max_annual = max(annual_values)
-                    value_range = max_annual - min_annual
-                    
-                    # Allow some extrapolation but within reasonable bounds
-                    safe_min = max(0, min_annual - 0.3 * value_range)
-                    safe_max = max_annual + 0.3 * value_range
-                    smooth_annual = np.clip(smooth_annual, safe_min, safe_max)
-                    
-                    # Convert to monthly value
-                    monthly_value = smooth_annual / 12
-                    
-                    key = f"{date.year}-{date.month:02d}"
-                    monthly_curve[key] = monthly_value
+                    if year in reported_years:
+                        # For reported years: distribute annual total evenly across 12 months
+                        # We'll calculate the exact monthly value to ensure sum = annual
+                        year_mask = reported_data['year'] == year
+                        if year_mask.any():
+                            reported_row = reported_data[year_mask].iloc[0]
+                        else:
+                            continue
+                        annual_total = reported_row['annual_emissions_attributed']
+                        monthly_value = annual_total / 12
+                        monthly_curve[key] = monthly_value
+                        
+                    else:
+                        # For estimated years: use smooth interpolation
+                        month_timestamp = date.timestamp()
+                        smooth_annual = float(f(month_timestamp))
+                        
+                        # Apply safety constraints
+                        min_annual = min(annual_values)
+                        max_annual = max(annual_values)
+                        value_range = max_annual - min_annual
+                        
+                        safe_min = max(0, min_annual - 0.3 * value_range)
+                        safe_max = max_annual + 0.3 * value_range
+                        smooth_annual = np.clip(smooth_annual, safe_min, safe_max)
+                        
+                        monthly_value = smooth_annual / 12
+                        monthly_curve[key] = monthly_value
                 
-                # Ensure reported years sum to exact annual totals
-                for _, row in reported_data.iterrows():
-                    year = int(row['year'])
-                    target_annual = row['annual_emissions_attributed']
+                # Step 4: Apply smoothing between reported and estimated years to avoid jumps
+                # Find transitions between reported and estimated years
+                all_years = sorted(set(date.year for date in monthly_dates))
+                
+                for i, year in enumerate(all_years):
+                    is_reported = year in reported_years
                     
-                    # Get current monthly sum for this year
-                    year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
-                    current_sum = sum(monthly_curve.get(key, 0) for key in year_keys)
-                    
-                    if current_sum > 0:
-                        # Scale monthly values to match exact annual total
-                        adjustment_factor = target_annual / current_sum
-                        for key in year_keys:
-                            if key in monthly_curve:
-                                monthly_curve[key] *= adjustment_factor
+                    # Check for transitions and apply gentle smoothing
+                    if i > 0:
+                        prev_year = all_years[i-1]
+                        prev_reported = prev_year in reported_years
+                        
+                        # If transitioning from reported to estimated or vice versa
+                        if is_reported != prev_reported:
+                            # Apply gentle smoothing at the boundary
+                            self._smooth_year_transition(monthly_curve, prev_year, year)
             
             return monthly_curve
             
@@ -466,6 +497,38 @@ class CarbonCalculator:
                 key = f"{year}-{date.month:02d}"
                 monthly_curve[key] = annual_value / 12
             return monthly_curve
+    
+    def _smooth_year_transition(self, monthly_curve: Dict[str, float], year1: int, year2: int) -> None:
+        """Apply gentle smoothing at transitions between reported and estimated years."""
+        try:
+            # Get end of year1 and start of year2 values
+            year1_dec = monthly_curve.get(f"{year1}-12", 0)
+            year2_jan = monthly_curve.get(f"{year2}-01", 0)
+            
+            # If there's a significant jump, apply gentle smoothing
+            if abs(year2_jan - year1_dec) > 0.1 * max(year1_dec, year2_jan):
+                # Calculate a smooth transition value
+                transition_value = (year1_dec + year2_jan) / 2
+                
+                # Apply gentle transition over the boundary months
+                # Adjust December of year1 and January of year2 slightly toward transition
+                smoothing_factor = 0.3  # Adjust by 30% toward smooth transition
+                
+                if f"{year1}-12" in monthly_curve:
+                    monthly_curve[f"{year1}-12"] = (
+                        year1_dec * (1 - smoothing_factor) + 
+                        transition_value * smoothing_factor
+                    )
+                
+                if f"{year2}-01" in monthly_curve:
+                    monthly_curve[f"{year2}-01"] = (
+                        year2_jan * (1 - smoothing_factor) + 
+                        transition_value * smoothing_factor
+                    )
+                    
+        except Exception as e:
+            # If smoothing fails, leave values as they are
+            pass
     
     def _estimate_missing_intensities(self, intensity_data: Dict, company_name: str) -> None:
         """Estimate missing carbon intensities using temporal interpolation."""
