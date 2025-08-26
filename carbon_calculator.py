@@ -373,7 +373,7 @@ class CarbonCalculator:
             return pd.DataFrame()
     
     def _create_smooth_monthly_curve(self, annual_df: pd.DataFrame, min_year: int, max_year: int) -> Dict[str, float]:
-        """Create a smooth monthly emissions curve that preserves annual totals exactly."""
+        """Create smooth monthly emissions curve using cubic spline interpolation while preserving annual totals exactly."""
         try:
             # Create monthly date range
             monthly_dates = pd.date_range(
@@ -400,123 +400,81 @@ class CarbonCalculator:
                 year = int(row['year'])
                 annual_targets[year] = row['annual_emissions_attributed']
             
-            # Step 1: Generate constrained smooth monthly estimates
-            # Use a two-phase approach: create base trend, then adjust to meet constraints
-            
-            # Phase 1: Create smooth baseline using annual midpoints
+            # CUBIC SPLINE INTERPOLATION APPROACH (from working React methodology)
+            # Step 1: Create cubic spline through annual data points (year midpoints)
             annual_years = sorted(annual_targets.keys())
             annual_values = [annual_targets[year] for year in annual_years]
             
-            # Create smooth function through annual midpoints (July 1st)
-            annual_timestamps = []
-            for year in annual_years:
-                try:
-                    midpoint = pd.Timestamp(year=year, month=7, day=1)
-                    if pd.notna(midpoint) and midpoint != pd.NaT:
-                        annual_timestamps.append(midpoint.timestamp())
-                    else:
-                        # Fallback to simple timestamp calculation
-                        import datetime
-                        dt = datetime.datetime(year, 7, 1)
-                        annual_timestamps.append(dt.timestamp())
-                except Exception:
-                    # Fallback to simple timestamp calculation
-                    import datetime
-                    dt = datetime.datetime(year, 7, 1)
-                    annual_timestamps.append(dt.timestamp())
+            # Create spline function through year midpoints (July 1st = day 182.5)
+            year_midpoints = [year + 0.5 for year in annual_years]  # July 1st as fractional year
             
-            # Create interpolation function
+            # Use cubic spline interpolation for smooth transitions
             if len(annual_values) >= 3:
-                f_smooth = interpolate.PchipInterpolator(annual_timestamps, annual_values)
+                from scipy.interpolate import CubicSpline
+                spline_func = CubicSpline(year_midpoints, annual_values, bc_type='natural')
             else:
-                f_smooth = interpolate.interp1d(annual_timestamps, annual_values, 
-                                              kind='linear', bounds_error=False, 
-                                              fill_value=annual_values[0])
+                # Fallback to linear for insufficient data
+                spline_func = interpolate.interp1d(year_midpoints, annual_values, 
+                                                 kind='linear', bounds_error=False, 
+                                                 fill_value='extrapolate')
             
-            # Phase 2: For each year with an annual target, distribute it across 12 months
-            # while maintaining smooth transitions between years
-            for year in range(min_year, max_year + 1):
+            # Step 2: Generate initial smooth monthly estimates using spline
+            initial_monthly = {}
+            for date in monthly_dates:
+                year = date.year
+                month = date.month
+                # Convert to fractional year (month 1 = 0.042, month 6 = 0.458, month 12 = 0.958)
+                fractional_year = year + (month - 0.5) / 12
+                
+                # Get smooth annual estimate from spline
+                smooth_annual = float(spline_func(fractional_year))
+                
+                # Convert to monthly rate (annual ÷ 12)
+                key = f"{year}-{month:02d}"
+                initial_monthly[key] = max(0, smooth_annual / 12)
+            
+            # Step 3: CONSTRAINT SATISFACTION - Adjust to meet exact annual totals
+            # This is the key step that the working methodology uses
+            for year in annual_targets:
                 year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
                 
-                if year in annual_targets:
-                    # This year has a known annual total - distribute it smoothly
-                    target_annual = annual_targets[year]
+                # Get current monthly estimates for this year
+                current_monthly = [initial_monthly.get(key, 0) for key in year_keys]
+                current_sum = sum(current_monthly)
+                target_annual = annual_targets[year]
+                
+                if current_sum > 0:
+                    # Scale factor to meet exact constraint
+                    scale_factor = target_annual / current_sum
                     
-                    # Create realistic monthly variation around annual average
-                    annual_avg = target_annual / 12  # Average monthly rate
-                    
-                    # Generate smooth variation weights based on interpolated curve
-                    monthly_variations = []
-                    for month in range(1, 13):
-                        try:
-                            month_date = pd.Timestamp(year=year, month=month, day=15)  # Mid-month
-                            if pd.notna(month_date) and month_date != pd.NaT:
-                                month_timestamp = month_date.timestamp()
-                            else:
-                                import datetime
-                                dt = datetime.datetime(year, month, 15)
-                                month_timestamp = dt.timestamp()
-                        except Exception:
-                            import datetime
-                            dt = datetime.datetime(year, month, 15)
-                            month_timestamp = dt.timestamp()
-                        
-                        # Get smooth interpolated value
-                        smooth_value = float(f_smooth(month_timestamp))
-                        
-                        # Create variation factor relative to annual average (but constrained)
-                        # Convert smooth annual value to monthly equivalent
-                        smooth_monthly = smooth_value / 12
-                        
-                        # Calculate variation from annual average (limit to ±30% variation)
-                        if annual_avg > 0:
-                            variation_factor = smooth_monthly / annual_avg
-                            variation_factor = np.clip(variation_factor, 0.7, 1.3)  # ±30% max variation
-                        else:
-                            variation_factor = 1.0
-                        
-                        monthly_variations.append(variation_factor)
-                    
-                    # Normalize to ensure sum equals target annual
-                    total_variation = sum(monthly_variations)
-                    if total_variation > 0:
-                        normalized_variations = [v / total_variation for v in monthly_variations]
-                    else:
-                        normalized_variations = [1/12] * 12  # Equal distribution fallback
-                    
-                    # Distribute annual total with realistic monthly variations
-                    for i, month in enumerate(range(1, 13)):
-                        key = f"{year}-{month:02d}"
-                        monthly_curve[key] = target_annual * normalized_variations[i]
-                        
+                    # Apply proportional scaling to maintain shape while meeting constraint
+                    for i, key in enumerate(year_keys):
+                        monthly_curve[key] = current_monthly[i] * scale_factor
                 else:
-                    # Year without target - use interpolated smooth values
-                    for month in range(1, 13):
-                        try:
-                            month_date = pd.Timestamp(year=year, month=month, day=15)
-                            if pd.notna(month_date) and month_date != pd.NaT:
-                                month_timestamp = month_date.timestamp()
-                            else:
-                                import datetime
-                                dt = datetime.datetime(year, month, 15)
-                                month_timestamp = dt.timestamp()
-                        except Exception:
-                            import datetime
-                            dt = datetime.datetime(year, month, 15)
-                            month_timestamp = dt.timestamp()
-                        
-                        smooth_annual = float(f_smooth(month_timestamp))
-                        key = f"{year}-{month:02d}"
-                        monthly_curve[key] = max(0, smooth_annual / 12)
+                    # Fallback to equal distribution
+                    monthly_value = target_annual / 12
+                    for key in year_keys:
+                        monthly_curve[key] = monthly_value
             
-            # Phase 3: Validation - verify annual totals match exactly
+            # Step 4: Fill in missing years with spline estimates (no constraints)
+            for date in monthly_dates:
+                year = date.year
+                month = date.month
+                key = f"{year}-{month:02d}"
+                
+                if key not in monthly_curve:  # Year without annual target
+                    fractional_year = year + (month - 0.5) / 12
+                    smooth_annual = float(spline_func(fractional_year))
+                    monthly_curve[key] = max(0, smooth_annual / 12)
+            
+            # Step 5: Validation - verify annual totals match exactly
+            print(f"\n=== CUBIC SPLINE VALIDATION ===")
             for year, target_annual in annual_targets.items():
                 year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
                 calculated_sum = sum(monthly_curve.get(key, 0) for key in year_keys)
                 difference = abs(calculated_sum - target_annual)
                 
-                # Should be mathematically exact, but allow for tiny floating point errors
-                if difference > 0.001:  # 0.001 threshold for floating point precision
+                if difference > 0.001:  # Should be mathematically exact
                     print(f"WARNING: Year {year} sum mismatch: target={target_annual:.6f}, calculated={calculated_sum:.6f}, diff={difference:.6f}")
                 else:
                     print(f"Year {year}: target={target_annual:.2f}, calculated={calculated_sum:.2f}, ✓ exact match")

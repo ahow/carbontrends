@@ -39,32 +39,25 @@ class ChartBuilder:
             data_sorted = data.sort_values(['year', 'month']).copy()
             data_sorted['date'] = pd.to_datetime(data_sorted[['year', 'month']].assign(day=1))
             
-            # DEBUG: Verify annual sums in visualization
-            print(f"\n=== DEBUGGING VISUALIZATION DATA ===")
+            # Verify data integrity - annual sums should match targets
             for year in sorted(data_sorted['year'].unique()):
                 year_data = data_sorted[data_sorted['year'] == year]
-                monthly_sum = year_data['monthly_emissions_attributed'].sum()
-                annual_equivalent = monthly_sum  # This IS the annual total (12 months)
-                avg_monthly = monthly_sum / 12
-                print(f"Year {year}: monthly_sum={monthly_sum:.2f} (annual), avg_monthly={avg_monthly:.2f}")
                 if len(year_data) != 12:
-                    print(f"  WARNING: Year {year} has {len(year_data)} months instead of 12!")
+                    print(f"WARNING: Year {year} has {len(year_data)} months instead of 12!")
             
             # Create figure
             fig = go.Figure()
             
-            # Add smooth monthly trend line - show as annualized rate for visual comparison
+            # Add smooth monthly trend line - monthly values varying smoothly
             fig.add_trace(go.Scatter(
                 x=data_sorted['date'],
-                y=data_sorted['monthly_emissions_attributed'] * 12,  # Convert to annualized rate
+                y=data_sorted['monthly_emissions_attributed'],
                 mode='lines',
-                name='Smooth Monthly Estimates (Annualized)',
+                name='Smooth Monthly Estimates',
                 line=dict(color=self.color_palette['smooth_trend'], width=2.5, smoothing=1.3),
                 hovertemplate='<b>%{x|%Y-%m}</b><br>' +
-                            'Annualized Rate: %{y:.1f} tCO₂e<br>' +
-                            'Monthly Portion: %{customdata:.1f} tCO₂e<br>' +
+                            'Monthly Attribution: %{y:.1f} tCO₂e<br>' +
                             '<extra></extra>',
-                customdata=data_sorted['monthly_emissions_attributed'],
                 showlegend=True
             ))
             
@@ -80,7 +73,7 @@ class ChartBuilder:
                     marker=dict(color=self.color_palette['reported_data'], size=6, symbol='circle'),
                     connectgaps=False,
                     hovertemplate='<b>%{x|%Y-%m}</b><br>' +
-                                'Annual Rate: %{y:.1f} tCO₂e<br>' +
+                                'Monthly Rate: %{y:.1f} tCO₂e<br>' +
                                 'Data Quality: Reported<br>' +
                                 '<extra></extra>',
                     showlegend=True
@@ -113,7 +106,7 @@ class ChartBuilder:
                     dtick='M12'  # Show ticks every year like the reference
                 ),
                 yaxis=dict(
-                    title="Annual carbon emissions attributable to $1M investment (tCO₂e)",
+                    title="Monthly carbon emissions attributable to $1M investment (tCO₂e)",
                     showgrid=True,
                     gridcolor=self.color_palette['grid'],
                     tickformat='.1f'
@@ -181,14 +174,15 @@ class ChartBuilder:
                 # Get January data for this year as representative
                 jan_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['month'] == 1)]
                 if not jan_data.empty:
-                    # Convert monthly portion back to annualized rate for display consistency
-                    monthly_portion = jan_data['monthly_emissions_attributed'].iloc[0]
-                    year_values[year] = monthly_portion * 12
+                    # Use average monthly value for the year
+                    year_data = filtered_data[filtered_data['year'] == year]
+                    avg_monthly = year_data['monthly_emissions_attributed'].mean()
+                    year_values[year] = avg_monthly
                 else:
                     # Fallback to any month if January not available
                     year_data = filtered_data[filtered_data['year'] == year]
-                    monthly_portion = year_data['monthly_emissions_attributed'].iloc[0]
-                    year_values[year] = monthly_portion * 12
+                    avg_monthly = year_data['monthly_emissions_attributed'].mean()
+                    year_values[year] = avg_monthly
             
             if not year_values:
                 return pd.DataFrame()
@@ -240,14 +234,15 @@ class ChartBuilder:
                 # Get January data for this year as representative
                 jan_data = estimated_only[(estimated_only['year'] == year) & (estimated_only['month'] == 1)]
                 if not jan_data.empty:
-                    # Convert monthly portion back to annualized rate for display consistency
-                    monthly_portion = jan_data['monthly_emissions_attributed'].iloc[0]
-                    year_values[year] = monthly_portion * 12
+                    # Use average monthly value for the year
+                    year_data = estimated_only[estimated_only['year'] == year]
+                    avg_monthly = year_data['monthly_emissions_attributed'].mean()
+                    year_values[year] = avg_monthly
                 else:
                     # Fallback to any month if January not available
                     year_data = estimated_only[estimated_only['year'] == year]
-                    monthly_portion = year_data['monthly_emissions_attributed'].iloc[0]
-                    year_values[year] = monthly_portion * 12
+                    avg_monthly = year_data['monthly_emissions_attributed'].mean()
+                    year_values[year] = avg_monthly
             
             if not year_values:
                 return pd.DataFrame()
