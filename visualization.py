@@ -39,6 +39,17 @@ class ChartBuilder:
             data_sorted = data.sort_values(['year', 'month']).copy()
             data_sorted['date'] = pd.to_datetime(data_sorted[['year', 'month']].assign(day=1))
             
+            # DEBUG: Verify annual sums in visualization
+            print(f"\n=== DEBUGGING VISUALIZATION DATA ===")
+            for year in sorted(data_sorted['year'].unique()):
+                year_data = data_sorted[data_sorted['year'] == year]
+                monthly_sum = year_data['monthly_emissions_attributed'].sum()
+                annual_equivalent = monthly_sum  # This IS the annual total (12 months)
+                avg_monthly = monthly_sum / 12
+                print(f"Year {year}: monthly_sum={monthly_sum:.2f} (annual), avg_monthly={avg_monthly:.2f}")
+                if len(year_data) != 12:
+                    print(f"  WARNING: Year {year} has {len(year_data)} months instead of 12!")
+            
             # Create figure
             fig = go.Figure()
             
