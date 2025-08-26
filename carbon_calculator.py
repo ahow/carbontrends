@@ -442,8 +442,11 @@ class CarbonCalculator:
                     # This year has a known annual total - distribute it smoothly
                     target_annual = annual_targets[year]
                     
-                    # Generate initial monthly distribution based on smooth curve
-                    monthly_weights = []
+                    # Create realistic monthly variation around annual average
+                    annual_avg = target_annual / 12  # Average monthly rate
+                    
+                    # Generate smooth variation weights based on interpolated curve
+                    monthly_variations = []
                     for month in range(1, 13):
                         try:
                             month_date = pd.Timestamp(year=year, month=month, day=15)  # Mid-month
@@ -458,20 +461,33 @@ class CarbonCalculator:
                             dt = datetime.datetime(year, month, 15)
                             month_timestamp = dt.timestamp()
                         
+                        # Get smooth interpolated value
                         smooth_value = float(f_smooth(month_timestamp))
-                        monthly_weights.append(max(0.1, smooth_value))  # Prevent zero weights
+                        
+                        # Create variation factor relative to annual average (but constrained)
+                        # Convert smooth annual value to monthly equivalent
+                        smooth_monthly = smooth_value / 12
+                        
+                        # Calculate variation from annual average (limit to ±30% variation)
+                        if annual_avg > 0:
+                            variation_factor = smooth_monthly / annual_avg
+                            variation_factor = np.clip(variation_factor, 0.7, 1.3)  # ±30% max variation
+                        else:
+                            variation_factor = 1.0
+                        
+                        monthly_variations.append(variation_factor)
                     
-                    # Normalize weights to sum to 1
-                    total_weight = sum(monthly_weights)
-                    if total_weight > 0:
-                        normalized_weights = [w / total_weight for w in monthly_weights]
+                    # Normalize to ensure sum equals target annual
+                    total_variation = sum(monthly_variations)
+                    if total_variation > 0:
+                        normalized_variations = [v / total_variation for v in monthly_variations]
                     else:
-                        normalized_weights = [1/12] * 12  # Equal distribution fallback
+                        normalized_variations = [1/12] * 12  # Equal distribution fallback
                     
-                    # Distribute annual total according to normalized weights
+                    # Distribute annual total with realistic monthly variations
                     for i, month in enumerate(range(1, 13)):
                         key = f"{year}-{month:02d}"
-                        monthly_curve[key] = target_annual * normalized_weights[i]
+                        monthly_curve[key] = target_annual * normalized_variations[i]
                         
                 else:
                     # Year without target - use interpolated smooth values
