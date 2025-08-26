@@ -193,7 +193,7 @@ class CarbonCalculator:
             # Carbon intensity-based outlier removal has already been applied above
             # No additional outlier smoothing needed here
             
-            # Generate smooth monthly data
+            # Generate smooth monthly data that maintains annual totals
             monthly_data = self._generate_monthly_smooth_data(annual_df)
             
             return monthly_data
