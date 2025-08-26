@@ -43,15 +43,18 @@ class ChartBuilder:
             fig = go.Figure()
             
             # Add smooth monthly trend line (like the green line in reference)
+            # Convert to annualized rate for proper visual comparison with annual step data
             fig.add_trace(go.Scatter(
                 x=data_sorted['date'],
-                y=data_sorted['monthly_emissions_attributed'],
+                y=data_sorted['monthly_emissions_attributed'] * 12,
                 mode='lines',
                 name='Monthly Attribution (Smooth)',
                 line=dict(color=self.color_palette['smooth_trend'], width=2.5, smoothing=1.3),
                 hovertemplate='<b>%{x|%Y-%m}</b><br>' +
-                            'Monthly Attribution: %{y:.1f} tCO₂e<br>' +
+                            'Annualized Rate: %{y:.1f} tCO₂e<br>' +
+                            'Monthly Portion: %{customdata:.1f} tCO₂e<br>' +
                             '<extra></extra>',
+                customdata=data_sorted['monthly_emissions_attributed'],
                 showlegend=True
             ))
             
@@ -67,7 +70,7 @@ class ChartBuilder:
                     marker=dict(color=self.color_palette['reported_data'], size=6, symbol='circle'),
                     connectgaps=False,
                     hovertemplate='<b>%{x|%Y-%m}</b><br>' +
-                                'Annual Data: %{y:.1f} tCO₂e/month<br>' +
+                                'Annual Rate: %{y:.1f} tCO₂e<br>' +
                                 'Data Quality: Reported<br>' +
                                 '<extra></extra>',
                     showlegend=True
@@ -100,7 +103,7 @@ class ChartBuilder:
                     dtick='M12'  # Show ticks every year like the reference
                 ),
                 yaxis=dict(
-                    title="Monthly carbon emissions attributable to $1M investment (tCO₂e)",
+                    title="Annual carbon emissions attributable to $1M investment (tCO₂e)",
                     showgrid=True,
                     gridcolor=self.color_palette['grid'],
                     tickformat='.1f'
@@ -168,11 +171,14 @@ class ChartBuilder:
                 # Get January data for this year as representative
                 jan_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['month'] == 1)]
                 if not jan_data.empty:
-                    year_values[year] = jan_data['monthly_emissions_attributed'].iloc[0]
+                    # Convert monthly value back to annualized rate for step display
+                    monthly_value = jan_data['monthly_emissions_attributed'].iloc[0]
+                    year_values[year] = monthly_value * 12
                 else:
                     # Fallback to any month if January not available
                     year_data = filtered_data[filtered_data['year'] == year]
-                    year_values[year] = year_data['monthly_emissions_attributed'].iloc[0]
+                    monthly_value = year_data['monthly_emissions_attributed'].iloc[0]
+                    year_values[year] = monthly_value * 12
             
             if not year_values:
                 return pd.DataFrame()
@@ -224,11 +230,14 @@ class ChartBuilder:
                 # Get January data for this year as representative
                 jan_data = estimated_only[(estimated_only['year'] == year) & (estimated_only['month'] == 1)]
                 if not jan_data.empty:
-                    year_values[year] = jan_data['monthly_emissions_attributed'].iloc[0]
+                    # Convert monthly value back to annualized rate for step display
+                    monthly_value = jan_data['monthly_emissions_attributed'].iloc[0]
+                    year_values[year] = monthly_value * 12
                 else:
                     # Fallback to any month if January not available
                     year_data = estimated_only[estimated_only['year'] == year]
-                    year_values[year] = year_data['monthly_emissions_attributed'].iloc[0]
+                    monthly_value = year_data['monthly_emissions_attributed'].iloc[0]
+                    year_values[year] = monthly_value * 12
             
             if not year_values:
                 return pd.DataFrame()
