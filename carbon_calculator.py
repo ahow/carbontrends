@@ -373,7 +373,7 @@ class CarbonCalculator:
             return pd.DataFrame()
     
     def _create_smooth_monthly_curve(self, annual_df: pd.DataFrame, min_year: int, max_year: int) -> Dict[str, float]:
-        """Create a smooth monthly emissions curve that preserves annual totals and provides natural trends."""
+        """Create a smooth monthly emissions curve that preserves annual totals exactly."""
         try:
             # Create monthly date range
             monthly_dates = pd.date_range(
@@ -394,108 +394,116 @@ class CarbonCalculator:
                     monthly_curve[key] = monthly_value
                 return monthly_curve
             
-            # Step 1: Create a smooth spline curve through annual midpoints
-            annual_years = all_data['year'].tolist()
-            annual_values = all_data['annual_emissions_attributed'].tolist()
-            
-            # Create midpoint timestamps (July 1st of each year)
-            annual_timestamps = []
-            valid_annual_values = []
-            
-            for i, year in enumerate(annual_years):
-                try:
-                    midpoint = pd.Timestamp(year=int(year), month=7, day=1)
-                    if pd.notna(midpoint) and midpoint != pd.NaT:
-                        annual_timestamps.append(midpoint.timestamp())
-                        valid_annual_values.append(annual_values[i])
-                except Exception:
-                    continue
-            
-            # Create smooth interpolation function
-            if len(valid_annual_values) >= 3:
-                f = interpolate.PchipInterpolator(annual_timestamps, valid_annual_values)
-            else:
-                f = interpolate.interp1d(annual_timestamps, valid_annual_values, 
-                                       kind='linear', bounds_error=False, fill_value=0.0)
-            
-            # Step 2: Generate initial smooth monthly values from spline
-            raw_monthly_values = {}
-            for date in monthly_dates:
-                month_timestamp = date.timestamp()
-                smooth_annual = float(f(month_timestamp))
-                
-                # Apply safety constraints to prevent unrealistic values
-                min_val = min(valid_annual_values)
-                max_val = max(valid_annual_values)
-                value_range = max_val - min_val
-                safe_min = max(0, min_val - 0.2 * value_range)
-                safe_max = max_val + 0.2 * value_range
-                smooth_annual = np.clip(smooth_annual, safe_min, safe_max)
-                
-                # Convert to monthly value (this creates the smooth curve)
-                monthly_value = smooth_annual / 12
-                key = f"{date.year}-{date.month:02d}"
-                raw_monthly_values[key] = monthly_value
-            
-            # Step 3: Adjust monthly values to ensure each year sums to its annual target
             # Create mapping of year -> annual target
             annual_targets = {}
             for _, row in all_data.iterrows():
                 year = int(row['year'])
                 annual_targets[year] = row['annual_emissions_attributed']
             
-            # For each year with data, calculate adjustment factor
-            for year, target_annual in annual_targets.items():
+            # Step 1: Generate constrained smooth monthly estimates
+            # Use a two-phase approach: create base trend, then adjust to meet constraints
+            
+            # Phase 1: Create smooth baseline using annual midpoints
+            annual_years = sorted(annual_targets.keys())
+            annual_values = [annual_targets[year] for year in annual_years]
+            
+            # Create smooth function through annual midpoints (July 1st)
+            annual_timestamps = []
+            for year in annual_years:
+                try:
+                    midpoint = pd.Timestamp(year=year, month=7, day=1)
+                    if pd.notna(midpoint) and midpoint != pd.NaT:
+                        annual_timestamps.append(midpoint.timestamp())
+                    else:
+                        # Fallback to simple timestamp calculation
+                        import datetime
+                        dt = datetime.datetime(year, 7, 1)
+                        annual_timestamps.append(dt.timestamp())
+                except Exception:
+                    # Fallback to simple timestamp calculation
+                    import datetime
+                    dt = datetime.datetime(year, 7, 1)
+                    annual_timestamps.append(dt.timestamp())
+            
+            # Create interpolation function
+            if len(annual_values) >= 3:
+                f_smooth = interpolate.PchipInterpolator(annual_timestamps, annual_values)
+            else:
+                f_smooth = interpolate.interp1d(annual_timestamps, annual_values, 
+                                              kind='linear', bounds_error=False, 
+                                              fill_value=annual_values[0])
+            
+            # Phase 2: For each year with an annual target, distribute it across 12 months
+            # while maintaining smooth transitions between years
+            for year in range(min_year, max_year + 1):
                 year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
                 
-                # Get all monthly values for this year from raw monthly values
-                year_monthly_values = []
-                valid_keys = []
-                for key in year_keys:
-                    if key in raw_monthly_values:
-                        year_monthly_values.append(raw_monthly_values[key])
-                        valid_keys.append(key)
-                
-                if len(year_monthly_values) > 0:
-                    # Calculate current sum for this year
-                    current_sum = sum(year_monthly_values)
+                if year in annual_targets:
+                    # This year has a known annual total - distribute it smoothly
+                    target_annual = annual_targets[year]
                     
-                    if current_sum > 0:
-                        # Calculate adjustment factor to match target annual sum
-                        adjustment_factor = target_annual / current_sum
+                    # Generate initial monthly distribution based on smooth curve
+                    monthly_weights = []
+                    for month in range(1, 13):
+                        try:
+                            month_date = pd.Timestamp(year=year, month=month, day=15)  # Mid-month
+                            if pd.notna(month_date) and month_date != pd.NaT:
+                                month_timestamp = month_date.timestamp()
+                            else:
+                                import datetime
+                                dt = datetime.datetime(year, month, 15)
+                                month_timestamp = dt.timestamp()
+                        except Exception:
+                            import datetime
+                            dt = datetime.datetime(year, month, 15)
+                            month_timestamp = dt.timestamp()
                         
-                        # Apply adjustment while preserving the smooth shape
-                        for key in valid_keys:
-                            monthly_curve[key] = raw_monthly_values[key] * adjustment_factor
-                            
-                        # Debug: Print adjustment info
-                        print(f"Year {year}: target={target_annual:.2f}, raw_sum={current_sum:.2f}, factor={adjustment_factor:.3f}")
+                        smooth_value = float(f_smooth(month_timestamp))
+                        monthly_weights.append(max(0.1, smooth_value))  # Prevent zero weights
+                    
+                    # Normalize weights to sum to 1
+                    total_weight = sum(monthly_weights)
+                    if total_weight > 0:
+                        normalized_weights = [w / total_weight for w in monthly_weights]
                     else:
-                        # Fallback: distribute evenly if current sum is zero
-                        monthly_value = target_annual / 12
-                        for key in year_keys:
-                            monthly_curve[key] = monthly_value
-                        print(f"Year {year}: fallback distribution, monthly={monthly_value:.2f}")
+                        normalized_weights = [1/12] * 12  # Equal distribution fallback
+                    
+                    # Distribute annual total according to normalized weights
+                    for i, month in enumerate(range(1, 13)):
+                        key = f"{year}-{month:02d}"
+                        monthly_curve[key] = target_annual * normalized_weights[i]
+                        
                 else:
-                    # No monthly data found, distribute evenly
-                    monthly_value = target_annual / 12
-                    for key in year_keys:
-                        monthly_curve[key] = monthly_value
-                    print(f"Year {year}: no monthly data, even distribution, monthly={monthly_value:.2f}")
+                    # Year without target - use interpolated smooth values
+                    for month in range(1, 13):
+                        try:
+                            month_date = pd.Timestamp(year=year, month=month, day=15)
+                            if pd.notna(month_date) and month_date != pd.NaT:
+                                month_timestamp = month_date.timestamp()
+                            else:
+                                import datetime
+                                dt = datetime.datetime(year, month, 15)
+                                month_timestamp = dt.timestamp()
+                        except Exception:
+                            import datetime
+                            dt = datetime.datetime(year, month, 15)
+                            month_timestamp = dt.timestamp()
+                        
+                        smooth_annual = float(f_smooth(month_timestamp))
+                        key = f"{year}-{month:02d}"
+                        monthly_curve[key] = max(0, smooth_annual / 12)
             
-            # Step 4: Ensure all months are covered (don't override adjusted values)
-            # Only fill months for years that don't have annual targets
-            for date in monthly_dates:
-                key = f"{date.year}-{date.month:02d}"
-                year = date.year
-                if key not in monthly_curve:
-                    if year in annual_targets:
-                        # This should not happen if Step 3 worked correctly
-                        # Use even distribution as fallback
-                        monthly_curve[key] = annual_targets[year] / 12
-                    elif key in raw_monthly_values:
-                        # For years without targets, use raw interpolated values
-                        monthly_curve[key] = raw_monthly_values[key]
+            # Phase 3: Validation - verify annual totals match exactly
+            for year, target_annual in annual_targets.items():
+                year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
+                calculated_sum = sum(monthly_curve.get(key, 0) for key in year_keys)
+                difference = abs(calculated_sum - target_annual)
+                
+                # Should be mathematically exact, but allow for tiny floating point errors
+                if difference > 0.001:  # 0.001 threshold for floating point precision
+                    print(f"WARNING: Year {year} sum mismatch: target={target_annual:.6f}, calculated={calculated_sum:.6f}, diff={difference:.6f}")
+                else:
+                    print(f"Year {year}: target={target_annual:.2f}, calculated={calculated_sum:.2f}, ✓ exact match")
             
             return monthly_curve
             
@@ -504,7 +512,6 @@ class CarbonCalculator:
             # Fallback to simple annual distribution
             monthly_curve = {}
             for date in pd.date_range(start=f'{min_year}-01-01', end=f'{max_year}-12-01', freq='MS'):
-                # Simple linear interpolation fallback
                 year = date.year
                 annual_value = np.interp(year, annual_df['year'].tolist(), 
                                        annual_df['annual_emissions_attributed'].tolist())
