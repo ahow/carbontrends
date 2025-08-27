@@ -61,16 +61,15 @@ class ChartBuilder:
                 showlegend=True
             ))
             
-            # Add annual reported data points as step functions (like blue steps in reference)
+            # Add annual reported data points as step functions (simple lines without markers)
             reported_data = self._get_annual_points(data_sorted, 'reported')
             if not reported_data.empty:
                 fig.add_trace(go.Scatter(
                     x=reported_data['date'],
                     y=reported_data['monthly_emissions_attributed'],
-                    mode='lines+markers',
+                    mode='lines',
                     name='Annual Reported Data (Steps)',
                     line=dict(color=self.color_palette['reported_data'], width=2, shape='hv'),
-                    marker=dict(color=self.color_palette['reported_data'], size=6, symbol='circle'),
                     connectgaps=False,
                     hovertemplate='<b>%{x|%Y-%m}</b><br>' +
                                 'Monthly Rate: %{y:.1f} tCO₂e<br>' +
