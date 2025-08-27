@@ -114,35 +114,8 @@ class CarbonCalculator:
                         'has_ev': ev_annual is not None
                     }
             
-            # Second pass: identify and remove carbon intensity outliers
-            valid_intensities = []
-            valid_years = []
-            for year_int, data in intensity_data.items():
-                if data['intensity'] is not None:
-                    valid_intensities.append(data['intensity'])
-                    valid_years.append(year_int)
-            
-            if len(valid_intensities) >= 3:
-                # Remove outliers using carbon intensity
-                intensities_array = np.array(valid_intensities)
-                median_intensity = np.median(intensities_array)
-                mad_intensity = np.median(np.abs(intensities_array - median_intensity))
-                
-                # Flag carbon intensity outliers (>3 MADs from median)
-                intensity_threshold = 3 * mad_intensity if mad_intensity > 0 else median_intensity * 0.1
-                outlier_mask = np.abs(intensities_array - median_intensity) > intensity_threshold
-                
-                # Also flag multiplicative outliers (>5x median intensity)
-                multiplicative_outlier_mask = intensities_array > (median_intensity * 5)
-                outlier_mask = outlier_mask | multiplicative_outlier_mask
-                
-                # Remove outlier years from consideration
-                for i, year_int in enumerate(valid_years):
-                    if outlier_mask[i]:
-                        intensity_data[year_int]['intensity'] = None  # Mark as invalid
-                        intensity_data[year_int]['is_outlier'] = True
-                        original_intensity = valid_intensities[i]
-                        print(f"Carbon intensity outlier removed for {company_name} year {year_int}: {original_intensity:.6f} tCO2e/USD")
+            # Second pass: identify and remove carbon intensity outliers using year-over-year change methodology
+            self._detect_year_over_year_outliers(intensity_data, company_name)
             
             # Third pass: estimate missing carbon intensities using temporal interpolation
             self._estimate_missing_intensities(intensity_data, company_name)
@@ -596,3 +569,85 @@ class CarbonCalculator:
             for year_int, data in intensity_data.items():
                 if data['intensity'] is None and data['sales'] is not None:
                     intensity_data[year_int]['intensity'] = default_intensity
+    
+    def _detect_year_over_year_outliers(self, intensity_data: Dict, company_name: str) -> None:
+        """Detect outliers using year-over-year percentage change methodology.
+        
+        A value is flagged as outlier if it changes by more than +100%/-50% compared to:
+        - Both previous AND subsequent year (if both are reported)
+        - Only the available year (if only one neighbor is reported)
+        """
+        try:
+            sorted_years = sorted(intensity_data.keys())
+            
+            for i, year in enumerate(sorted_years):
+                data = intensity_data[year]
+                if data['intensity'] is None:
+                    continue
+                
+                current_intensity = data['intensity']
+                
+                # Get previous and next year data
+                prev_intensity = None
+                next_intensity = None
+                
+                if i > 0:
+                    prev_data = intensity_data[sorted_years[i-1]]
+                    if prev_data['intensity'] is not None:
+                        prev_intensity = prev_data['intensity']
+                
+                if i < len(sorted_years) - 1:
+                    next_data = intensity_data[sorted_years[i+1]]
+                    if next_data['intensity'] is not None:
+                        next_intensity = next_data['intensity']
+                
+                # Skip if no neighbors available
+                if prev_intensity is None and next_intensity is None:
+                    continue
+                
+                # Check percentage changes
+                is_outlier = False
+                outlier_reasons = []
+                
+                if prev_intensity is not None:
+                    prev_change = (current_intensity - prev_intensity) / prev_intensity
+                    if prev_change > 1.0:  # >+100% increase
+                        outlier_reasons.append(f"+{prev_change*100:.1f}% vs prev year")
+                        is_outlier = True
+                    elif prev_change < -0.5:  # >-50% decrease
+                        outlier_reasons.append(f"{prev_change*100:.1f}% vs prev year")
+                        is_outlier = True
+                
+                if next_intensity is not None:
+                    next_change = (current_intensity - next_intensity) / next_intensity
+                    if next_change > 1.0:  # >+100% increase
+                        outlier_reasons.append(f"+{next_change*100:.1f}% vs next year")
+                        is_outlier = True
+                    elif next_change < -0.5:  # >-50% decrease
+                        outlier_reasons.append(f"{next_change*100:.1f}% vs next year")
+                        is_outlier = True
+                
+                # If testing against both years, both must trigger outlier condition
+                if prev_intensity is not None and next_intensity is not None:
+                    # Reset outlier flag - both conditions must be met
+                    prev_change = (current_intensity - prev_intensity) / prev_intensity
+                    next_change = (current_intensity - next_intensity) / next_intensity
+                    
+                    prev_outlier = prev_change > 1.0 or prev_change < -0.5
+                    next_outlier = next_change > 1.0 or next_change < -0.5
+                    
+                    is_outlier = prev_outlier and next_outlier
+                    
+                    if is_outlier:
+                        outlier_reasons = [f"{prev_change*100:.1f}% vs prev, {next_change*100:.1f}% vs next"]
+                
+                # Flag as outlier if conditions met
+                if is_outlier:
+                    intensity_data[year]['intensity'] = None
+                    intensity_data[year]['is_outlier'] = True
+                    reasons_str = ", ".join(outlier_reasons)
+                    print(f"Year-over-year outlier removed for {company_name} year {year}: {current_intensity:.6f} tCO2e/USD ({reasons_str})")
+                    
+        except Exception as e:
+            print(f"Error in year-over-year outlier detection for {company_name}: {e}")
+            # Continue without outlier detection if this fails
