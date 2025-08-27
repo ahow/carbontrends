@@ -6,7 +6,9 @@ This is a Streamlit-based carbon emissions attribution dashboard that analyzes t
 
 ## Recent Changes (January 2025)
 
-- **Fixed Monthly Conversion Bug**: Resolved critical issue where carbon attribution charts were displaying annual emissions values instead of monthly values. Charts now correctly show monthly emissions (annual ÷ 12) for proper temporal comparison.
+- **Cubic Spline Smoothing Algorithm**: Successfully implemented proven cubic spline interpolation methodology from user's working React application. Creates smooth monthly estimates that maintain exact annual total constraints while showing realistic month-to-month variations.
+- **Mathematical Precision**: Constraint satisfaction algorithm ensures 12 monthly values sum exactly to annual totals using proportional scaling approach.
+- **Enhanced Visualization**: Charts now display proper monthly rates with smooth green lines varying realistically around average monthly values.
 - **Enhanced Tab Structure**: Reorganized application into 6 logical tabs (About, Data Upload, Company Analysis, Portfolio Analysis, Portfolio Library, System Status) for improved user workflow.
 - **Improved Data Processing**: Enhanced upload error handling and progress indicators to prevent "stuck on processing" issues.
 
@@ -33,9 +35,9 @@ The system follows a modular architecture with three main processing classes:
 
 **DataProcessor**: Handles Excel file ingestion and validation, requiring four specific sheets (Reference, Carbon, Sales, EV). Processes and validates data structure before making it available to other components.
 
-**CarbonCalculator**: Core business logic component that calculates carbon attribution for investments. Handles temporal data processing, company metadata retrieval, and performs the mathematical calculations to determine carbon footprint per investment dollar.
+**CarbonCalculator**: Core business logic component that calculates carbon attribution for investments. Uses cubic spline interpolation through annual data midpoints with constraint satisfaction to create smooth monthly estimates. Handles temporal data processing, company metadata retrieval, and performs the mathematical calculations to determine carbon footprint per investment dollar.
 
-**ChartBuilder**: Visualization engine using Plotly to create interactive time-series charts. Handles chart styling, data presentation, and provides visual feedback on data quality and trends.
+**ChartBuilder**: Visualization engine using Plotly to create interactive time-series charts. Displays smooth monthly carbon attribution trends (green lines) and flat annual step functions (blue lines). Handles chart styling, data presentation, and provides visual feedback on data quality and trends.
 
 ### Data Processing Pipeline
 The system processes data through a sequential pipeline:
