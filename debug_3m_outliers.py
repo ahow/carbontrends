@@ -1,9 +1,30 @@
 import numpy as np
 
-# 3M carbon intensity data from the user's screenshot
-# Units are different but values match console output patterns
-carbon_intensities = [275, 215, 233, 206, 221, 258, 208, 186, 199, 154, 203, 181, 154, 129, 113, 112]
-years = [2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+# 3M actual data from user's uploaded spreadsheet
+carbon_data = {
+    2008: 6940000, 2009: 4980000, 2010: 6220000, 2011: 6080000, 2012: 6820000,
+    2013: 7950000, 2014: 6630000, 2015: 5530000, 2016: 5980000, 2017: 5640000,
+    2018: 6650000, 2019: 5830000, 2020: 5280000, 2021: 4570000, 2022: 3880000, 2023: 3580000
+}
+
+sales_data = {
+    2008: 25269000, 2009: 23123000, 2010: 26662000, 2011: 29611000, 2012: 29904000,
+    2013: 30871000, 2014: 31821000, 2015: 30274000, 2016: 30109000, 2017: 31657000,
+    2018: 32765000, 2019: 32136000, 2020: 32184000, 2021: 35355000, 2022: 34229000, 2023: 32681000
+}
+
+# Calculate carbon intensities (tCO2e per USD)
+carbon_intensities = []
+years = []
+for year in sorted(carbon_data.keys()):
+    if year in sales_data and sales_data[year] > 0:
+        intensity = carbon_data[year] / sales_data[year]
+        carbon_intensities.append(intensity)
+        years.append(year)
+        
+print("=== CALCULATED CARBON INTENSITIES ===")
+for year, intensity in zip(years, carbon_intensities):
+    print(f"  {year}: {intensity:.6f} tCO2e/USD")
 
 print("=== 3M OUTLIER DETECTION ANALYSIS ===")
 print("Raw carbon intensity data:")
