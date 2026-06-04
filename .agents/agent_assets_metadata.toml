@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "_e6EB3mRLN8kG23lyIt-g"
+uri = "file://carbon_dashboard_code.zip"
+type = "unspecified"
+title = "Carbon Dashboard - Full Code"
+
+[[outputs]]
+id = "ilcls22iVL7sQr3dJ5zTl"
+uri = "file://CARBON_DASHBOARD_DESCRIPTION.md"
+type = "text"
+title = "Application Description"
