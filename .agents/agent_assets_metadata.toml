@@ -12,3 +12,15 @@ id = "ilcls22iVL7sQr3dJ5zTl"
 uri = "file://CARBON_DASHBOARD_DESCRIPTION.md"
 type = "text"
 title = "Application Description"
+
+[[outputs]]
+id = "pf0SW87rCfb_MooM6vbtS"
+uri = "file://uploaded_files/CarbonData_CarbonAlphaHC.xlsx"
+type = "table"
+title = "Carbon Data (Reference, Carbon, Sales, EV)"
+
+[[outputs]]
+id = "gKwW7wx3kAkSOl7yBbP1X"
+uri = "file://uploaded_files/PortfolioHoldings.xlsx"
+type = "table"
+title = "Portfolio Holdings"
