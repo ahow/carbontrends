@@ -1,0 +1,74 @@
+The Core Challenge
+You want to reconstruct a continuous, realistic emissions pathway for each company from data that is:
+Sparse (annual, sometimes with gaps)
+Lagged (1–2 years behind the present)
+Occasionally wrong (miscalculations, unit errors)
+Occasionally discontinuous (M&A, spin-offs, scope boundary changes)
+The key insight is that real-world carbon emissions are physically continuous — a factory doesn't instantaneously double or halve its emissions. Any apparent discontinuity in the data is almost certainly a measurement artefact, not a physical reality. This gives us a strong prior to work with.
+Proposed Approach: A Three-Layer Framework
+Layer 1: Data Cleaning & Discontinuity Detection
+Before any interpolation, classify each company's data into one of three categories:
+Category A — Clean Data (no intervention needed)
+Year-over-year changes are within a plausible physical range (e.g., ±30% per year)
+These companies proceed directly to interpolation
+Category B — Discontinuity Detected (structural break)
+A single large jump (>50%) that is sustained in subsequent years (i.e., the new level persists)
+This suggests a real structural change (acquisition, divestment, scope change)
+Treatment: Split the time series at the break point and treat pre/post as separate regimes. Only interpolate within each regime. For portfolio purposes, use only the post-break data (which reflects the company's current structure).
+Category C — Spike/Reversal (data error or transient anomaly)
+A large jump followed by a reversal back toward the prior level
+This suggests a data error or one-off reporting anomaly
+Treatment: Exclude the anomalous year(s) entirely and interpolate through the gap as if those data points didn't exist.
+The classification logic would be:
+Plain Text
+If |change| > threshold AND next year reverts toward prior level → Category C (exclude the spike)
+If |change| > threshold AND new level is sustained for 2+ years → Category B (structural break)
+Otherwise → Category A (clean)
+Layer 2: Robust Interpolation
+For the cleaned data, I'd propose replacing the current approach with something more physically grounded:
+Option A: Constrained Monotonic Piecewise Cubic Hermite (PCHIP) instead of Cubic Spline
+PCHIP interpolation prevents overshoot — it won't create artificial peaks or troughs between data points
+It's monotone between data points where the data is monotone (i.e., if emissions are declining year-on-year, the monthly values will also decline monotonically between those years)
+It's less "wiggly" than a cubic spline, which is more physically realistic for emissions trajectories
+You still apply the proportional scaling to ensure annual totals are conserved
+Option B: Log-space interpolation
+Work in log-space (interpolate log(intensity) rather than intensity directly)
+This naturally prevents negative values and treats percentage changes symmetrically
+A 50% increase and a 50% decrease are equidistant in log-space, which better reflects how emissions change in practice (multiplicative rather than additive processes)
+Convert back to linear space after interpolation
+My recommendation: Option B (log-space) combined with PCHIP, which gives you both the overshoot prevention and the multiplicative symmetry.
+Layer 3: Extrapolation (Estimating Current/Future Values)
+For the gap between the last reported year and today, rather than naive linear extrapolation:
+Approach: Bayesian shrinkage toward sector trend
+Calculate the company's own recent trend (e.g., average annual % change over last 3 years)
+Calculate the sector's median annual % change over the same period
+Blend them with a weight that increases toward the sector median as you extrapolate further into the future:
+Plain Text
+Extrapolated change = w × company_trend + (1-w) × sector_trend
+where w decays with time beyond last observation (e.g., w = 0.8 at +1 year, 0.5 at +2 years, 0.3 at +3 years)
+This reflects the reasonable prior that we become less confident in company-specific trends the further we extrapolate, and the sector average becomes a better estimate.
+Layer 4 (Optional): Confidence Bands
+Display uncertainty visually:
+Within reported data range: narrow confidence band (±5–10%) reflecting measurement uncertainty
+Extrapolated range: widening confidence band that grows with distance from last observation
+This makes it immediately clear to the user which parts of the curve are grounded in data vs. estimated
+Summary of Proposed Changes
+Current Approach
+Proposed Approach
+Single outlier threshold (>100% / >50%)
+Three-category classification (Clean / Structural Break / Spike)
+Cubic spline in linear space
+PCHIP interpolation in log-space
+Exclude outlier, interpolate through
+Distinguish persistent breaks from transient spikes
+Linear extrapolation with cap
+Bayesian shrinkage toward sector median trend
+No uncertainty indication
+Confidence bands that widen in extrapolated regions
+Same treatment for all companies
+Category-specific treatment based on data quality
+Practical Considerations
+Thresholds should be sector-aware — a 30% change is normal for a fast-growing tech company but alarming for a utility. The "plausible physical range" should be calibrated per sector.
+The structural break detection needs at least 2 years of post-break data to confirm the new level is sustained. For recent breaks (e.g., a jump in the most recent year), you'd flag it as "uncertain" rather than definitively classifying it.
+Conservation of annual totals should still be enforced within each regime — the proportional scaling step in the current code is sound and should be retained.
+The 2,026 extreme reversals you found would almost all be classified as Category C (spike/reversal) and excluded automatically, which would dramatically improve the quality of the interpolated curves.
