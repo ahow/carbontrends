@@ -48,6 +48,31 @@ class ChartBuilder:
             # Create figure
             fig = go.Figure()
             
+            # Add empirical confidence band (widens with estimation horizon) as a
+            # shaded area behind the smooth trend line.
+            if {'monthly_emissions_lower', 'monthly_emissions_upper'} <= set(data_sorted.columns):
+                fig.add_trace(go.Scatter(
+                    x=data_sorted['date'],
+                    y=data_sorted['monthly_emissions_upper'],
+                    mode='lines',
+                    line=dict(width=0),
+                    hoverinfo='skip',
+                    showlegend=False
+                ))
+                fig.add_trace(go.Scatter(
+                    x=data_sorted['date'],
+                    y=data_sorted['monthly_emissions_lower'],
+                    mode='lines',
+                    line=dict(width=0),
+                    fill='tonexty',
+                    fillcolor='rgba(46, 204, 113, 0.18)',
+                    name='Confidence Band',
+                    hovertemplate='<b>%{x|%Y-%m}</b><br>' +
+                                'Lower estimate: %{y:.1f} tCO₂e<br>' +
+                                '<extra></extra>',
+                    showlegend=True
+                ))
+            
             # Add smooth monthly trend line - monthly values varying smoothly
             fig.add_trace(go.Scatter(
                 x=data_sorted['date'],

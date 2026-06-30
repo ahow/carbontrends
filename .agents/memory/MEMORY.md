@@ -1,0 +1,1 @@
+- [Carbon intensity methodology](carbon-intensity-methodology.md) — one validated pipeline (estimate_intensity_series) shared by app + backtest; regime-aware capping & log-PCHIP are the easy-to-break parts.

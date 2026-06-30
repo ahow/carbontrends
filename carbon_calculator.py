@@ -4,6 +4,12 @@ from typing import Dict, List, Optional, Tuple
 from scipy import interpolate
 import streamlit as st
 
+import methodology as M
+
+# Carbon/sales data ends in 2023; "today" is 2026, so we nowcast through here.
+CURRENT_YEAR = 2026
+
+
 class CarbonCalculator:
     """Calculates carbon attribution for investments and handles temporal smoothing."""
     
@@ -13,6 +19,74 @@ class CarbonCalculator:
         self.carbon_df = data['carbon']
         self.sales_df = data['sales']
         self.ev_df = data['ev']
+        # Sector statistics (lazily built once, shared across companies).
+        self._sector_growth: Optional[Dict[str, float]] = None
+        self._sector_threshold: Optional[Dict[str, float]] = None
+        self._isin_to_sector: Optional[Dict[str, str]] = None
+
+    # ------------------------------------------------------------------
+    # Sector-aware context (thresholds + trend) used by the methodology
+    # ------------------------------------------------------------------
+    def _build_sector_stats(self) -> None:
+        """Compute per-subsector jump thresholds and trend growth once.
+
+        Mirrors backtest_methodology.compute_sector_* so the production path
+        uses the exact same sector definitions that were validated offline.
+        """
+        if self._sector_growth is not None:
+            return
+        try:
+            ref = self.reference_df
+            sec_col = 'Subsector' if 'Subsector' in ref.columns else 'Sector'
+            self._isin_to_sector = dict(zip(ref['ISIN'], ref[sec_col]))
+
+            carbon = self.carbon_df.set_index('ISIN')
+            sales = self.sales_df.set_index('ISIN')
+            year_cols = [c for c in carbon.columns if str(c).isdigit()
+                         and c in sales.columns]
+            sorted_cols = sorted(year_cols, key=lambda c: int(c))
+
+            bucket: Dict[str, List[float]] = {}
+            common = carbon.index.intersection(sales.index)
+            for isin in common:
+                sec = self._isin_to_sector.get(isin, 'UNKNOWN')
+                c_row = carbon.loc[isin]
+                s_row = sales.loc[isin]
+                prev_year = None
+                prev_int = None
+                for col in sorted_cols:
+                    cv = c_row[col]
+                    sv = s_row[col]
+                    if pd.isna(cv) or pd.isna(sv) or sv <= 0 or cv <= 0:
+                        continue
+                    yr = int(col)
+                    inten = float(cv) / float(sv)
+                    if (prev_year is not None and yr - prev_year == 1
+                            and prev_int and prev_int > 0):
+                        bucket.setdefault(sec, []).append(
+                            float(np.log(inten / prev_int)))
+                    prev_year, prev_int = yr, inten
+
+            self._sector_growth = {
+                sec: float(np.exp(np.median(v))) for sec, v in bucket.items() if v
+            }
+            self._sector_threshold = {
+                sec: M.sector_jump_threshold(v) for sec, v in bucket.items() if v
+            }
+        except Exception as e:
+            print(f"Sector stats build failed, using defaults: {e}")
+            self._sector_growth = {}
+            self._sector_threshold = {}
+            self._isin_to_sector = {}
+
+    def _sector_context(self, isin: str) -> Tuple[float, Optional[float]]:
+        """Return (jump_threshold_log, sector_log_growth) for a company."""
+        self._build_sector_stats()
+        sector = (self._isin_to_sector or {}).get(isin, 'UNKNOWN')
+        threshold = (self._sector_threshold or {}).get(sector, M.DEFAULT_JUMP_LOG)
+        growth = (self._sector_growth or {}).get(sector)
+        sector_log_growth = float(np.log(growth)) if growth and growth > 0 else None
+        return threshold, sector_log_growth
         
     def get_companies_list(self) -> List[str]:
         """Get list of available companies for selection."""
@@ -114,41 +188,63 @@ class CarbonCalculator:
                         'has_ev': ev_annual is not None
                     }
             
-            # Second pass: identify and remove carbon intensity outliers using year-over-year change methodology
-            self._detect_year_over_year_outliers(intensity_data, company_name)
-            
-            # Third pass: estimate missing carbon intensities using temporal interpolation
-            self._estimate_missing_intensities(intensity_data, company_name)
-            
-            # Fourth pass: create final annual data using corrected intensities
-            for year_int in sorted(intensity_data.keys()):
-                data = intensity_data[year_int]
-                
-                # Estimate missing EV if needed
-                if not data['has_ev']:
-                    data['ev'] = self._estimate_enterprise_value(year_int, ev_data, sales_data, data['sales'])
-                
-                # Skip if we don't have essential data
-                if data['ev'] is None or data['ev'] <= 0:
+            # Second pass: run the validated estimation pipeline (spike removal +
+            # log-PCHIP interpolation + sector-shrinkage extrapolation).
+            reported = {y: d['intensity'] for y, d in intensity_data.items()
+                        if d['intensity'] is not None}
+            if len(reported) < 1:
+                st.warning(f"Insufficient carbon/sales data for {company_name}")
+                return None
+
+            jump_threshold, sector_log_growth = self._sector_context(isin)
+            first_year = min(reported)
+            last_reported = max(reported)
+            # Cover every historical year plus forward nowcast to the current year.
+            target_years = list(range(first_year, max(last_reported, CURRENT_YEAR) + 1))
+            estimates = M.estimate_intensity_series(
+                reported, target_years,
+                jump_threshold_log=jump_threshold,
+                sector_log_growth=sector_log_growth,
+            )
+
+            # Most recent reported sales, used to hold sales flat for forward years
+            # (sales projection is intentionally conservative - the validated work
+            # is on carbon intensity, not revenue).
+            last_sales = None
+            for y in sorted(reported):
+                if intensity_data[y]['sales']:
+                    last_sales = intensity_data[y]['sales']
+
+            # Third pass: build final annual points from the estimated intensities.
+            for year_int in target_years:
+                est = estimates.get(year_int)
+                if est is None:
                     continue
-                if data['sales'] is None or data['sales'] <= 0:
+
+                existing = intensity_data.get(year_int, {})
+                sales_val = existing.get('sales')
+                if sales_val is None or sales_val <= 0:
+                    sales_val = last_sales  # forward / missing-sales year
+                if sales_val is None or sales_val <= 0:
                     continue
-                if data['intensity'] is None:
+
+                ev_val = existing.get('ev')
+                if ev_val is None or ev_val <= 0:
+                    ev_val = self._estimate_enterprise_value(
+                        year_int, ev_data, sales_data, sales_val)
+                if ev_val is None or ev_val <= 0:
                     continue
-                
-                # Calculate final carbon emissions from intensity and sales
-                final_carbon = data['intensity'] * data['sales']
-                
-                # Determine data quality
-                data_quality = 'reported'
-                if not data['has_carbon'] or not data['has_ev'] or data.get('is_outlier', False):
-                    data_quality = 'estimated'
-                
+
+                final_carbon = est.value * sales_val
+                data_quality = 'reported' if est.quality == 'reported' else 'estimated'
+
                 annual_data.append({
                     'year': year_int,
                     'carbon_emissions': final_carbon,
-                    'enterprise_value': data['ev'],
-                    'data_quality': data_quality
+                    'enterprise_value': ev_val,
+                    'data_quality': data_quality,
+                    'estimate_quality': est.quality,
+                    'band_rel': M.band_for(est.quality, est.horizon),
                 })
             
             if not annual_data:
@@ -226,57 +322,24 @@ class CarbonCalculator:
         except Exception:
             return None
     
-    def _estimate_carbon_emissions(self, target_year: int, carbon_data: Dict[str, float],
-                                 sales_data: Dict[str, float], target_sales: Optional[float]) -> Optional[float]:
-        """Estimate carbon emissions for missing years using improved trend-based logic."""
-        try:
-            # If we have carbon data, interpolate/extrapolate
-            if carbon_data:
-                years = sorted([int(y) for y in carbon_data.keys()])
-                values = [carbon_data[str(y)] for y in years]
-                
-                if len(years) >= 2:
-                    # Linear interpolation/extrapolation
-                    carbon_estimate = np.interp(target_year, years, values)
-                    return max(float(carbon_estimate), 0.0)
-                elif len(years) == 1:
-                    # Improved estimation for single data point
-                    single_year = years[0]
-                    single_carbon = values[0]
-                    
-                    # For historical years (before first data point), use conservative approach
-                    if target_year < single_year:
-                        # Assume historical emissions were higher due to less efficient technology
-                        # Use moderate increase: 2-3% per year going backward
-                        years_back = single_year - target_year
-                        historical_multiplier = 1 + (0.025 * years_back)  # 2.5% increase per year back
-                        historical_estimate = single_carbon * historical_multiplier
-                        
-                        # But cap it to avoid unrealistic values (max 2x the known value)
-                        return min(historical_estimate, single_carbon * 2.0)
-                    
-                    # For future years (after first data point), assume improvement
-                    elif target_year > single_year:
-                        # Assume emissions decrease due to efficiency improvements
-                        years_forward = target_year - single_year
-                        future_multiplier = max(0.5, 1 - (0.02 * years_forward))  # 2% decrease per year, min 50%
-                        return single_carbon * future_multiplier
-                    
-                    # For the same year, return the value
-                    else:
-                        return single_carbon
-            
-            # If no carbon data but have sales data, use industry average intensity
-            if target_sales and target_sales > 0:
-                # Conservative carbon intensity: 0.5 tCO2e per $1M sales
-                default_intensity = 0.5 / 1000000
-                return target_sales * default_intensity
-            
-            return None
-            
-        except Exception:
-            return None
-    
+    def _build_curve_interpolant(self, x: List[float], y: List[float]):
+        """Build a shape-preserving interpolant through annual points.
+
+        Uses log-space PCHIP when all values are positive (monotone, no
+        overshoot, never negative); falls back to linear-space PCHIP otherwise.
+        """
+        xa = np.asarray(x, dtype=float)
+        ya = np.asarray(y, dtype=float)
+        if len(xa) < 2:
+            const = float(ya[0]) if len(ya) else 0.0
+            return lambda t: const
+        from scipy.interpolate import PchipInterpolator
+        if np.all(ya > 0):
+            log_interp = PchipInterpolator(xa, np.log(ya), extrapolate=True)
+            return lambda t: float(np.exp(log_interp(t)))
+        lin_interp = PchipInterpolator(xa, ya, extrapolate=True)
+        return lambda t: float(lin_interp(t))
+
     def _generate_monthly_smooth_data(self, annual_df: pd.DataFrame) -> pd.DataFrame:
         """Generate smooth monthly data from annual data points with annual consistency."""
         try:
@@ -299,7 +362,13 @@ class CarbonCalculator:
             
             # Create smooth monthly curve
             monthly_curve = self._create_smooth_monthly_curve(annual_df, min_year, max_year)
-            
+
+            # Per-year relative band width (interpolated for filled gap years).
+            years_list = sorted(annual_df['year'].tolist())
+            band_values = (annual_df.sort_values('year')['band_rel'].to_numpy()
+                           if 'band_rel' in annual_df.columns
+                           else np.full(len(years_list), M.INTERPOLATED_BAND))
+
             monthly_data = []
             
             for date in monthly_dates:
@@ -316,14 +385,15 @@ class CarbonCalculator:
                     ownership_pct = row_data['ownership_percentage']
                     ev = row_data['enterprise_value']
                     data_quality = row_data['data_quality']
+                    band_rel = float(row_data.get('band_rel', M.INTERPOLATED_BAND))
                 else:
                     # Interpolate/extrapolate for missing years
-                    years_list = sorted(annual_df['year'].tolist())
                     ownership_values = annual_df['ownership_percentage'].to_numpy()
                     ev_values = annual_df['enterprise_value'].to_numpy()
                     
                     ownership_pct = np.interp(year, years_list, ownership_values)
                     ev = np.interp(year, years_list, ev_values)
+                    band_rel = float(np.interp(year, years_list, band_values))
                     data_quality = 'estimated'
                 
                 # Get smooth monthly emissions
@@ -336,6 +406,8 @@ class CarbonCalculator:
                     'ownership_percentage': ownership_pct,
                     'enterprise_value': ev,
                     'monthly_emissions_attributed': monthly_emissions,
+                    'monthly_emissions_lower': monthly_emissions * (1 - band_rel),
+                    'monthly_emissions_upper': monthly_emissions * (1 + band_rel),
                     'data_quality': data_quality
                 })
             
@@ -373,23 +445,17 @@ class CarbonCalculator:
                 year = int(row['year'])
                 annual_targets[year] = row['annual_emissions_attributed']
             
-            # CUBIC SPLINE INTERPOLATION APPROACH (from working React methodology)
-            # Step 1: Create cubic spline through annual data points (year midpoints)
+            # SHAPE-PRESERVING LOG-SPACE PCHIP INTERPOLATION
+            # Step 1: Build a monotone interpolant through annual data points.
+            # PCHIP avoids the overshoot/negative dips a cubic spline can produce;
+            # working in log-space keeps emissions strictly positive.
             annual_years = sorted(annual_targets.keys())
             annual_values = [annual_targets[year] for year in annual_years]
             
-            # Create spline function through year midpoints (July 1st = day 182.5)
-            year_midpoints = [year + 0.5 for year in annual_years]  # July 1st as fractional year
+            # Create spline function through year midpoints (July 1st)
+            year_midpoints = [year + 0.5 for year in annual_years]
             
-            # Use cubic spline interpolation for smooth transitions
-            if len(annual_values) >= 3:
-                from scipy.interpolate import CubicSpline
-                spline_func = CubicSpline(year_midpoints, annual_values, bc_type='natural')
-            else:
-                # Fallback to linear for insufficient data
-                spline_func = interpolate.interp1d(year_midpoints, annual_values, 
-                                                 kind='linear', bounds_error=False, 
-                                                 fill_value='extrapolate')
+            spline_func = self._build_curve_interpolant(year_midpoints, annual_values)
             
             # Step 2: Generate initial smooth monthly estimates using spline
             initial_monthly = {}
@@ -440,17 +506,13 @@ class CarbonCalculator:
                     smooth_annual = float(spline_func(fractional_year))
                     monthly_curve[key] = max(0, smooth_annual / 12)
             
-            # Step 5: Validation - verify annual totals match exactly
-            print(f"\n=== CUBIC SPLINE VALIDATION ===")
+            # Step 5: Integrity check - annual totals must be preserved exactly.
             for year, target_annual in annual_targets.items():
                 year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
                 calculated_sum = sum(monthly_curve.get(key, 0) for key in year_keys)
-                difference = abs(calculated_sum - target_annual)
-                
-                if difference > 0.001:  # Should be mathematically exact
-                    print(f"WARNING: Year {year} sum mismatch: target={target_annual:.6f}, calculated={calculated_sum:.6f}, diff={difference:.6f}")
-                else:
-                    print(f"Year {year}: target={target_annual:.2f}, calculated={calculated_sum:.2f}, ✓ exact match")
+                if abs(calculated_sum - target_annual) > 0.001:
+                    print(f"WARNING: Year {year} annual-total mismatch: "
+                          f"target={target_annual:.6f}, got={calculated_sum:.6f}")
             
             return monthly_curve
             
@@ -465,258 +527,3 @@ class CarbonCalculator:
                 key = f"{year}-{date.month:02d}"
                 monthly_curve[key] = annual_value / 12
             return monthly_curve
-    
-    def _smooth_year_transition(self, monthly_curve: Dict[str, float], year1: int, year2: int) -> None:
-        """Apply gentle smoothing at transitions between reported and estimated years."""
-        try:
-            # Get end of year1 and start of year2 values
-            year1_dec = monthly_curve.get(f"{year1}-12", 0)
-            year2_jan = monthly_curve.get(f"{year2}-01", 0)
-            
-            # If there's a significant jump, apply gentle smoothing
-            if abs(year2_jan - year1_dec) > 0.1 * max(year1_dec, year2_jan):
-                # Calculate a smooth transition value
-                transition_value = (year1_dec + year2_jan) / 2
-                
-                # Apply gentle transition over the boundary months
-                # Adjust December of year1 and January of year2 slightly toward transition
-                smoothing_factor = 0.3  # Adjust by 30% toward smooth transition
-                
-                if f"{year1}-12" in monthly_curve:
-                    monthly_curve[f"{year1}-12"] = (
-                        year1_dec * (1 - smoothing_factor) + 
-                        transition_value * smoothing_factor
-                    )
-                
-                if f"{year2}-01" in monthly_curve:
-                    monthly_curve[f"{year2}-01"] = (
-                        year2_jan * (1 - smoothing_factor) + 
-                        transition_value * smoothing_factor
-                    )
-                    
-        except Exception as e:
-            # If smoothing fails, leave values as they are
-            pass
-    
-    def _estimate_missing_intensities(self, intensity_data: Dict, company_name: str) -> None:
-        """Enhanced estimation methodology based on accuracy evaluation results."""
-        try:
-            # Get valid intensities for interpolation
-            valid_years = []
-            valid_intensities = []
-            
-            for year_int in sorted(intensity_data.keys()):
-                data = intensity_data[year_int]
-                if data['intensity'] is not None and not data.get('is_outlier', False):
-                    valid_years.append(year_int)
-                    valid_intensities.append(data['intensity'])
-            
-            if len(valid_intensities) < 2:
-                # Use fallback for insufficient data
-                self._fallback_estimation(intensity_data, valid_intensities, company_name)
-                return
-            
-            valid_years_array = np.array(valid_years)
-            valid_intensities_array = np.array(valid_intensities)
-            
-            # For now, use proven linear methodology (enhanced version coming in next iteration)
-            # Calculate simple linear trend 
-            slope, intercept = np.polyfit(valid_years_array, valid_intensities_array, 1)
-            model_type = "linear"
-            model_params = {"coeffs": [slope, intercept], "r2": 0.8}
-            
-            print(f"Enhanced estimation for {company_name}: using {model_type} model")
-            
-            # Apply estimation to missing years
-            for year_int, data in intensity_data.items():
-                if data['intensity'] is None and data['sales'] is not None:
-                    # Enhanced estimation with adaptive capping
-                    median_intensity = np.median(valid_intensities_array)
-                    is_extrapolation = year_int < np.min(valid_years_array) or year_int > np.max(valid_years_array)
-                    
-                    # Base estimation using linear trend
-                    estimated_intensity = slope * year_int + intercept
-                    
-                    # Adaptive capping based on evaluation findings
-                    if is_extrapolation:
-                        # Stricter caps for extrapolation (showed higher error rates)
-                        cap_factor = 1.5
-                        lower_bound = median_intensity * (1.0 / cap_factor)
-                        upper_bound = median_intensity * cap_factor
-                    else:
-                        # More lenient for interpolation (showed better accuracy)
-                        cap_factor = 2.0
-                        lower_bound = median_intensity * (1.0 / cap_factor)
-                        upper_bound = median_intensity * cap_factor
-                    
-                    # Apply capping
-                    estimated_intensity = np.clip(estimated_intensity, lower_bound, upper_bound)
-                    
-                    # Additional business logic constraints
-                    if estimated_intensity <= 0:
-                        estimated_intensity = median_intensity * 0.5
-                    
-                    intensity_data[year_int]['intensity'] = estimated_intensity
-                    print(f"Enhanced estimate for {company_name} year {year_int}: {estimated_intensity:.6f} tCO2e/USD")
-                    
-        except Exception as e:
-            print(f"Error in enhanced estimation for {company_name}: {e}")
-            # Fallback: use a conservative default intensity
-            default_intensity = 0.0001  # 0.1 tCO2e per $1000 sales
-            for year_int, data in intensity_data.items():
-                if data['intensity'] is None and data['sales'] is not None:
-                    intensity_data[year_int]['intensity'] = default_intensity
-
-    def _select_optimal_model(self, years: np.ndarray, intensities: np.ndarray) -> tuple:
-        """Select optimal estimation model based on data characteristics."""
-        from typing import Tuple
-        
-        # Calculate data volatility (coefficient of variation)
-        cv = np.std(intensities) / np.mean(intensities) if np.mean(intensities) > 0 else 0
-        
-        # Calculate trend strength
-        linear_fit = np.polyfit(years, intensities, 1)
-        linear_pred = np.polyval(linear_fit, years)
-        linear_r2 = 1 - np.sum((intensities - linear_pred)**2) / np.sum((intensities - np.mean(intensities))**2)
-        
-        # Decision logic based on evaluation results
-        if len(intensities) >= 5 and cv > 0.3 and linear_r2 < 0.7:
-            # High volatility, poor linear fit -> try quadratic
-            quad_fit = np.polyfit(years, intensities, 2)
-            quad_pred = np.polyval(quad_fit, years)
-            quad_r2 = 1 - np.sum((intensities - quad_pred)**2) / np.sum((intensities - np.mean(intensities))**2)
-            
-            if quad_r2 > linear_r2 + 0.1:  # Significant improvement
-                return "quadratic", {"coeffs": quad_fit, "r2": quad_r2}
-        
-        # Default to linear (which performed well in evaluation)
-        return "linear", {"coeffs": linear_fit, "r2": linear_r2}
-
-    def _estimate_year(self, year: int, valid_years: np.ndarray, valid_intensities: np.ndarray,
-                      model_type: str, model_params: dict, company_name: str) -> float:
-        """Estimate intensity for a specific year using selected model."""
-        
-        median_intensity = np.median(valid_intensities)
-        is_extrapolation = year < np.min(valid_years) or year > np.max(valid_years)
-        
-        # Base estimation
-        if model_type == "quadratic":
-            estimated = np.polyval(model_params["coeffs"], year)
-        else:  # linear
-            estimated = np.polyval(model_params["coeffs"], year)
-        
-        # Adaptive capping based on evaluation findings
-        if is_extrapolation:
-            # Stricter caps for extrapolation (evaluation showed these are more error-prone)
-            cap_factor = 1.5 if model_params.get("r2", 0) > 0.8 else 1.25
-            lower_bound = median_intensity * (1.0 / cap_factor)
-            upper_bound = median_intensity * cap_factor
-        else:
-            # More lenient for interpolation (evaluation showed these are more accurate)
-            cap_factor = 2.0
-            lower_bound = median_intensity * (1.0 / cap_factor)
-            upper_bound = median_intensity * cap_factor
-        
-        # Apply capping
-        capped_estimate = np.clip(estimated, lower_bound, upper_bound)
-        
-        # Additional business logic constraints
-        if capped_estimate <= 0:
-            capped_estimate = median_intensity * 0.5  # Minimum reasonable value
-        
-        return capped_estimate
-
-    def _fallback_estimation(self, intensity_data: dict, valid_intensities: list, company_name: str):
-        """Fallback estimation for insufficient data."""
-        if len(valid_intensities) == 1:
-            default_intensity = valid_intensities[0]
-        else:
-            # Industry default based on evaluation results
-            default_intensity = 0.0001  # 0.1 tCO2e per $1000 sales
-        
-        for year_int, data in intensity_data.items():
-            if data['intensity'] is None and data['sales'] is not None:
-                intensity_data[year_int]['intensity'] = default_intensity
-                print(f"Fallback estimate for {company_name} year {year_int}: {default_intensity:.6f} tCO2e/USD")
-    
-    def _detect_year_over_year_outliers(self, intensity_data: Dict, company_name: str) -> None:
-        """Detect outliers using year-over-year percentage change methodology.
-        
-        A value is flagged as outlier if it changes by more than +100%/-50% compared to:
-        - Both previous AND subsequent year (if both are reported)
-        - Only the available year (if only one neighbor is reported)
-        """
-        try:
-            sorted_years = sorted(intensity_data.keys())
-            
-            for i, year in enumerate(sorted_years):
-                data = intensity_data[year]
-                if data['intensity'] is None:
-                    continue
-                
-                current_intensity = data['intensity']
-                
-                # Get previous and next year data
-                prev_intensity = None
-                next_intensity = None
-                
-                if i > 0:
-                    prev_data = intensity_data[sorted_years[i-1]]
-                    if prev_data['intensity'] is not None:
-                        prev_intensity = prev_data['intensity']
-                
-                if i < len(sorted_years) - 1:
-                    next_data = intensity_data[sorted_years[i+1]]
-                    if next_data['intensity'] is not None:
-                        next_intensity = next_data['intensity']
-                
-                # Skip if no neighbors available
-                if prev_intensity is None and next_intensity is None:
-                    continue
-                
-                # Check percentage changes
-                is_outlier = False
-                outlier_reasons = []
-                
-                if prev_intensity is not None:
-                    prev_change = (current_intensity - prev_intensity) / prev_intensity
-                    if prev_change > 1.0:  # >+100% increase
-                        outlier_reasons.append(f"+{prev_change*100:.1f}% vs prev year")
-                        is_outlier = True
-                    elif prev_change < -0.5:  # >-50% decrease
-                        outlier_reasons.append(f"{prev_change*100:.1f}% vs prev year")
-                        is_outlier = True
-                
-                if next_intensity is not None:
-                    next_change = (current_intensity - next_intensity) / next_intensity
-                    if next_change > 1.0:  # >+100% increase
-                        outlier_reasons.append(f"+{next_change*100:.1f}% vs next year")
-                        is_outlier = True
-                    elif next_change < -0.5:  # >-50% decrease
-                        outlier_reasons.append(f"{next_change*100:.1f}% vs next year")
-                        is_outlier = True
-                
-                # If testing against both years, both must trigger outlier condition
-                if prev_intensity is not None and next_intensity is not None:
-                    # Reset outlier flag - both conditions must be met
-                    prev_change = (current_intensity - prev_intensity) / prev_intensity
-                    next_change = (current_intensity - next_intensity) / next_intensity
-                    
-                    prev_outlier = prev_change > 1.0 or prev_change < -0.5
-                    next_outlier = next_change > 1.0 or next_change < -0.5
-                    
-                    is_outlier = prev_outlier and next_outlier
-                    
-                    if is_outlier:
-                        outlier_reasons = [f"{prev_change*100:.1f}% vs prev, {next_change*100:.1f}% vs next"]
-                
-                # Flag as outlier if conditions met
-                if is_outlier:
-                    intensity_data[year]['intensity'] = None
-                    intensity_data[year]['is_outlier'] = True
-                    reasons_str = ", ".join(outlier_reasons)
-                    print(f"Year-over-year outlier removed for {company_name} year {year}: {current_intensity:.6f} tCO2e/USD ({reasons_str})")
-                    
-        except Exception as e:
-            print(f"Error in year-over-year outlier detection for {company_name}: {e}")
-            # Continue without outlier detection if this fails

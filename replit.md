@@ -4,11 +4,17 @@
 
 This is a Streamlit-based carbon emissions attribution dashboard that analyzes the carbon footprint attributable to $1M investments across companies. The application processes financial and emissions data from Excel files to calculate and visualize carbon attribution over time with smooth temporal trends and data quality transparency. Users can upload company data or work with sample data to explore carbon attribution patterns across different investments.
 
-## Recent Changes (January 2025)
+## Recent Changes (June 2026)
 
-- **Cubic Spline Smoothing Algorithm**: Successfully implemented proven cubic spline interpolation methodology from user's working React application. Creates smooth monthly estimates that maintain exact annual total constraints while showing realistic month-to-month variations.
-- **Mathematical Precision**: Constraint satisfaction algorithm ensures 12 monthly values sum exactly to annual totals using proportional scaling approach.
-- **Enhanced Visualization**: Charts now display proper monthly rates with smooth green lines varying realistically around average monthly values.
+- **Validated estimation methodology** (`methodology.py`): the carbon-intensity pipeline was reworked and validated offline against real data before going live. It removes one-off spikes, fills interior gaps with shape-preserving log-space PCHIP interpolation, and projects forward years by blending each company's own trend toward its subsector's trend (the further out, the more weight on the sector). Every estimate is capped against the company's typical level.
+- **Measured improvement**: on a backtest that hides recent years and checks the guess (7,134 companies, no data leakage), the typical error on next-year estimates dropped from ~29% to ~16%, and the worst-case average (the "tail") fell from several hundred percent to ~60%. Interior-gap accuracy improved from ~17% to ~11%.
+- **Forward nowcasting**: company charts now extend through the current year (2026). Sales are held flat for projected years (conservative) while the validated trend drives carbon intensity.
+- **Smoother, safe monthly curve**: monthly smoothing now uses log-space PCHIP instead of a cubic spline, which avoids the overshoot/negative dips a spline can produce, while still preserving exact annual totals via proportional scaling.
+- **Confidence bands**: charts show a shaded band around the trend that widens for estimated and further-out years, reflecting measured uncertainty by horizon.
+- **Validation harness** (`backtest_methodology.py`): a reproducible offline tool that loads the real dataset and reports error by horizon for each methodology variant; the production path shares the exact same code so results match the validation.
+
+## Earlier Changes (January 2025)
+
 - **Enhanced Tab Structure**: Reorganized application into 6 logical tabs (About, Data Upload, Company Analysis, Portfolio Analysis, Portfolio Library, System Status) for improved user workflow.
 - **Improved Data Processing**: Enhanced upload error handling and progress indicators to prevent "stuck on processing" issues.
 
