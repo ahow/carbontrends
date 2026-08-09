@@ -108,14 +108,23 @@ def compute_sector_thresholds(series, isin_to_sector, cutoff_year) -> Dict[str, 
 # ---------------------------------------------------------------------------
 
 def summarize(label: str, errors: List[float]) -> None:
+    """Report absolute-error location AND the signed bias.
+
+    Signed bias matters more than absolute error for this application: the
+    dashboard is used to measure *emissions reductions*, so a small persistent
+    level bias aggregates across a portfolio instead of cancelling out.
+    p90 is reported because the error distribution is heavily right-skewed and
+    the mean is dominated by a handful of tail cases.
+    """
     if not errors:
         print(f"  {label:<28} (no cases)")
         return
-    arr = np.abs(np.array(errors))
+    signed = np.array(errors)
+    arr = np.abs(signed)
     over50 = (arr > 0.5).mean() * 100
     print(f"  {label:<28} n={len(arr):<5} "
-          f"mean={arr.mean()*100:6.2f}%  median={np.median(arr)*100:6.2f}%  "
-          f">50%={over50:5.1f}%")
+          f"med={np.median(arr)*100:6.2f}%  p90={np.percentile(arr, 90)*100:6.1f}%  "
+          f">50%={over50:5.1f}%  bias={np.median(signed)*100:+6.2f}%")
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +233,93 @@ def est_pipeline(years, values, target, ctx):
     return est.value if est else None
 
 
+# ---------------------------------------------------------------------------
+# Naive benchmarks
+#
+# These exist so that every candidate estimator must beat "do essentially
+# nothing" before its complexity is justified. Carbon intensity behaves close
+# to a random walk with drift, so persistence is the standard reference point
+# for this class of series -- not an OLS trend line, which is a strawman for a
+# noisy multiplicative quantity. If added machinery cannot beat these, the
+# machinery is costing accuracy rather than buying it.
+# ---------------------------------------------------------------------------
+
+# Calibrated on the true multi-year holdout: the median company's intensity
+# falls ~4.5%/yr, so an undrifted forecast is biased high by ~4.5% per year of
+# horizon. Recalibrate on each data refresh via --calibrate.
+DRIFT_OFFSET_PER_YEAR = 0.045
+
+
+def _clean_for_extrap(years, values, ctx):
+    """Regime-split cleaning only -- shared by the benchmarks so that the
+    comparison isolates the *extrapolation rule*, not the cleaning step."""
+    thr = ctx.get("jump_threshold", M.DEFAULT_JUMP_LOG)
+    cls = M.classify_series(list(years), list(values),
+                            jump_threshold_log=thr,
+                            confirm_year=max(years), split_breaks=True)
+    if len(cls.values) >= 2:
+        return list(cls.years), list(cls.values)
+    return list(years), list(values)
+
+
+def est_persistence(years, values, target, ctx):
+    """Naive random walk: last observed value, carried forward or back."""
+    if not values:
+        return None
+    if target < years[0]:
+        return float(values[0])
+    return float(values[-1])
+
+
+def est_loglinear(years, values, target, ctx):
+    """Log-linear interpolation between neighbouring reported years.
+
+    Outside the reported range numpy.interp clamps, so this degrades to
+    persistence -- which is the intended behaviour for a benchmark.
+    """
+    if len(values) < 2:
+        return float(values[0]) if values else None
+    x = np.asarray(years, float)
+    y = np.log(np.asarray(values, float))
+    return float(np.exp(np.interp(float(target), x, y)))
+
+
+def est_sector_drift(years, values, target, ctx):
+    """Last clean value drifted at the sector's median log growth rate."""
+    cy, cv = _clean_for_extrap(years, values, ctx)
+    if not cv:
+        return None
+    sg = ctx.get("sector_growth")
+    g = float(np.log(sg)) if sg and sg > 0 else 0.0
+    h = float(target - cy[-1])
+    return float(cv[-1] * np.exp(g * h))
+
+
+def est_sector_drift_debiased(years, values, target, ctx):
+    """Sector drift plus a calibrated bias offset.
+
+    The sector median growth rate understates the typical company's decline,
+    so forecasts run high. The offset removes the residual level bias, which
+    is the error component that survives portfolio aggregation.
+    """
+    base = est_sector_drift(years, values, target, ctx)
+    if base is None:
+        return None
+    offset = ctx.get("drift_offset", DRIFT_OFFSET_PER_YEAR)
+    cy, _ = _clean_for_extrap(years, values, ctx)
+    h = float(target - cy[-1])
+    if h <= 0:
+        return base
+    return float(base * np.exp(-offset * h))
+
+
 ESTIMATORS: Dict[str, Estimator] = {
+    # --- naive benchmarks: any real estimator must beat these ---
+    "BM persistence": est_persistence,
+    "BM log-linear": est_loglinear,
+    "BM sector-drift": est_sector_drift,
+    "BM sector-drift debiased": est_sector_drift_debiased,
+    # --- candidate estimators ---
     "baseline (OLS+cap)": est_baseline,
     "robust (TheilSen+cap)": est_robust,
     "pchip-log (+log-trend)": est_pchip_log,
@@ -239,8 +334,22 @@ ESTIMATORS: Dict[str, Estimator] = {
 # ---------------------------------------------------------------------------
 
 def run_recent_year_holdout(series, isin_to_sector):
-    """Hold out the last K years per company; estimate them from the rest."""
+    """Hold out the last K reported years JOINTLY and forecast the final year.
+
+    Horizon semantics (this was previously wrong and materially understated
+    multi-year error). The earlier version set ``target = yrs[-horizon]`` and
+    took ``visible = [y for y in yrs if y < target]``, which also hid every
+    year *after* the target. The last visible year was therefore always
+    ``target - 1``, making every scenario a one-step-ahead forecast made with
+    progressively less history -- never a genuine 2- or 3-year-ahead forecast.
+
+    The production app extrapolates 2024/2025/2026 from carbon data ending in
+    2023, i.e. true horizons of 1, 2 and 3. To match that, we hide the last
+    ``horizon`` years as a block and predict the final one, so the gap between
+    the last visible year and the target really is ``horizon`` years.
+    """
     print("\n=== RECENT-YEAR HOLDOUT (nowcasting scenario) ===")
+    print("    Last K reported years hidden jointly; target = final year.")
     for horizon in range(1, MAX_HORIZON + 1):
         print(f"\n-- Horizon +{horizon} year(s) beyond last visible --")
         per_est: Dict[str, List[float]] = {k: [] for k in ESTIMATORS}
@@ -248,12 +357,16 @@ def run_recent_year_holdout(series, isin_to_sector):
             yrs = sorted(ints)
             if len(yrs) < MIN_HISTORY:
                 continue
-            target = yrs[-horizon]
-            visible_years = [y for y in yrs if y < target]
+            visible_years = yrs[:-horizon]
             if len(visible_years) < 2:
                 continue
+            target = yrs[-1]
+            # Guard against gappy series: only keep cases where the realised
+            # gap matches the nominal horizon, so the label means what it says.
+            if target - visible_years[-1] != horizon:
+                continue
             visible_vals = [ints[y] for y in visible_years]
-            cutoff = target - 1
+            cutoff = visible_years[-1]
             sector = isin_to_sector.get(isin, "UNKNOWN")
             if cutoff not in _THRESHOLD_CACHE:
                 _THRESHOLD_CACHE[cutoff] = compute_sector_thresholds(series, isin_to_sector, cutoff)
