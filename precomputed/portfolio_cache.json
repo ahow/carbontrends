@@ -1,0 +1,1097 @@
+{
+ "generated_at": "2026-08-09T14:26:16.038570+00:00",
+ "portfolios": {
+  "PortfolioHoldings::legacy": {
+   "name": "PortfolioHoldings",
+   "variant": "legacy",
+   "meta": {
+    "id": "legacy",
+    "label": "Legacy",
+    "short": "Pre-fix baseline",
+    "description": "Forward estimates capped around the retained regime median, and the sales fallback restricted to years with both carbon and sales. This is the model as it stood before the August 2026 review.",
+    "caveat": "For 17.7% of companies the median floor sits above the last reported intensity, so the fastest decarbonisers are pushed back up.",
+    "params": {
+     "cap_mode": "median",
+     "drift_offset": 0.0,
+     "sales_mode": "joint"
+    }
+   },
+   "series": [
+    {
+     "date": "2020-07-01",
+     "value": 14192918.353286786,
+     "holdings": 61,
+     "covered": 57,
+     "uncovered": 4,
+     "quality": "reported"
+    },
+    {
+     "date": "2020-10-01",
+     "value": 14959717.7757466,
+     "holdings": 60,
+     "covered": 57,
+     "uncovered": 3,
+     "quality": "reported"
+    },
+    {
+     "date": "2021-01-01",
+     "value": 9335371.249657447,
+     "holdings": 61,
+     "covered": 57,
+     "uncovered": 4,
+     "quality": "mixed"
+    },
+    {
+     "date": "2021-04-01",
+     "value": 9199491.885095071,
+     "holdings": 58,
+     "covered": 55,
+     "uncovered": 3,
+     "quality": "mixed"
+    },
+    {
+     "date": "2021-07-01",
+     "value": 8633016.113919621,
+     "holdings": 59,
+     "covered": 56,
+     "uncovered": 3,
+     "quality": "mixed"
+    },
+    {
+     "date": "2021-10-01",
+     "value": 8028453.38387432,
+     "holdings": 59,
+     "covered": 55,
+     "uncovered": 4,
+     "quality": "mixed"
+    },
+    {
+     "date": "2022-01-01",
+     "value": 7551080.751682238,
+     "holdings": 59,
+     "covered": 55,
+     "uncovered": 4,
+     "quality": "reported"
+    },
+    {
+     "date": "2022-04-01",
+     "value": 7477793.724845824,
+     "holdings": 59,
+     "covered": 54,
+     "uncovered": 5,
+     "quality": "reported"
+    },
+    {
+     "date": "2022-07-01",
+     "value": 7538481.69972186,
+     "holdings": 59,
+     "covered": 55,
+     "uncovered": 4,
+     "quality": "reported"
+    },
+    {
+     "date": "2022-10-01",
+     "value": 7530989.575623223,
+     "holdings": 58,
+     "covered": 55,
+     "uncovered": 3,
+     "quality": "reported"
+    },
+    {
+     "date": "2023-01-01",
+     "value": 7656913.1859900495,
+     "holdings": 59,
+     "covered": 56,
+     "uncovered": 3,
+     "quality": "mixed"
+    },
+    {
+     "date": "2023-04-01",
+     "value": 7560624.448078226,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "mixed"
+    },
+    {
+     "date": "2023-07-01",
+     "value": 6975966.208350421,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "mixed"
+    },
+    {
+     "date": "2023-10-01",
+     "value": 6718596.452382969,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "mixed"
+    },
+    {
+     "date": "2024-01-01",
+     "value": 9697632.190608883,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2024-04-01",
+     "value": 9463758.47577889,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2024-07-01",
+     "value": 9283131.36923927,
+     "holdings": 58,
+     "covered": 56,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2024-10-01",
+     "value": 9307539.48194104,
+     "holdings": 57,
+     "covered": 55,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2025-01-01",
+     "value": 7333540.310902403,
+     "holdings": 55,
+     "covered": 52,
+     "uncovered": 3,
+     "quality": "estimated"
+    },
+    {
+     "date": "2025-04-01",
+     "value": 7353616.835018363,
+     "holdings": 55,
+     "covered": 53,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2025-07-01",
+     "value": 7300111.355007103,
+     "holdings": 55,
+     "covered": 53,
+     "uncovered": 2,
+     "quality": "estimated"
+    }
+   ],
+   "decomposition": [
+    {
+     "from": "2020-07-01",
+     "to": "2020-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 766799.4224598095,
+     "total": 766799.4224598095
+    },
+    {
+     "from": "2020-10-01",
+     "to": "2021-01-01",
+     "emissions": 1473287.8523688957,
+     "valuation": -6950573.779901692,
+     "allocation": -147060.59855635907,
+     "total": -5624346.526089155
+    },
+    {
+     "from": "2021-01-01",
+     "to": "2021-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -135879.3645623781,
+     "total": -135879.3645623781
+    },
+    {
+     "from": "2021-04-01",
+     "to": "2021-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -566475.771175444,
+     "total": -566475.771175444
+    },
+    {
+     "from": "2021-07-01",
+     "to": "2021-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -604562.7300453013,
+     "total": -604562.7300453013
+    },
+    {
+     "from": "2021-10-01",
+     "to": "2022-01-01",
+     "emissions": -772327.5757779286,
+     "valuation": 448944.2162861094,
+     "allocation": -153989.2727002642,
+     "total": -477372.6321920834
+    },
+    {
+     "from": "2022-01-01",
+     "to": "2022-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -73287.02683641257,
+     "total": -73287.02683641257
+    },
+    {
+     "from": "2022-04-01",
+     "to": "2022-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 60687.97487603731,
+     "total": 60687.97487603731
+    },
+    {
+     "from": "2022-07-01",
+     "to": "2022-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -7492.124098636836,
+     "total": -7492.124098636836
+    },
+    {
+     "from": "2022-10-01",
+     "to": "2023-01-01",
+     "emissions": -176071.53053072686,
+     "valuation": 443527.96346382453,
+     "allocation": -141532.82256627193,
+     "total": 125923.61036682577
+    },
+    {
+     "from": "2023-01-01",
+     "to": "2023-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -96288.73791182566,
+     "total": -96288.73791182566
+    },
+    {
+     "from": "2023-04-01",
+     "to": "2023-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -584658.239727803,
+     "total": -584658.239727803
+    },
+    {
+     "from": "2023-07-01",
+     "to": "2023-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -257369.75596745216,
+     "total": -257369.75596745216
+    },
+    {
+     "from": "2023-10-01",
+     "to": "2024-01-01",
+     "emissions": 1814366.7369360144,
+     "valuation": 1403374.6342790665,
+     "allocation": -238705.63298916418,
+     "total": 2979035.738225917
+    },
+    {
+     "from": "2024-01-01",
+     "to": "2024-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -233873.71482999978,
+     "total": -233873.71482999978
+    },
+    {
+     "from": "2024-04-01",
+     "to": "2024-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -180627.1065396165,
+     "total": -180627.1065396165
+    },
+    {
+     "from": "2024-07-01",
+     "to": "2024-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 24408.11270177023,
+     "total": 24408.11270177023
+    },
+    {
+     "from": "2024-10-01",
+     "to": "2025-01-01",
+     "emissions": 852528.742453256,
+     "valuation": -836110.0097867236,
+     "allocation": -1990417.9037051708,
+     "total": -1973999.1710386383
+    },
+    {
+     "from": "2025-01-01",
+     "to": "2025-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 20076.52411595971,
+     "total": 20076.52411595971
+    },
+    {
+     "from": "2025-04-01",
+     "to": "2025-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -53505.480011259526,
+     "total": -53505.480011259526
+    }
+   ],
+   "cumulative": {
+    "emissions": 3191784.225449511,
+    "valuation": -5490836.975659415,
+    "allocation": -4593754.248069783,
+    "total": -6892806.998279687
+   },
+   "headline": {
+    "start": 14192918.353286786,
+    "end": 7300111.355007103,
+    "pct_change": -48.5651141414722,
+    "start_date": "2020-07-01",
+    "end_date": "2025-07-01"
+   }
+  },
+  "PortfolioHoldings::current": {
+   "name": "PortfolioHoldings",
+   "variant": "current",
+   "meta": {
+    "id": "current",
+    "label": "Current",
+    "short": "Anchored cap + latest sales",
+    "description": "Forward estimates capped around the last observed value rather than the regime median, and the sales fallback reads the most recent year with actual revenue.",
+    "caveat": "Removes the mechanical distortion but still has no view that intensities trend down, so it reads high at long horizons.",
+    "params": {
+     "cap_mode": "anchor",
+     "drift_offset": 0.0,
+     "sales_mode": "latest"
+    }
+   },
+   "series": [
+    {
+     "date": "2020-07-01",
+     "value": 14192918.353286786,
+     "holdings": 61,
+     "covered": 57,
+     "uncovered": 4,
+     "quality": "reported"
+    },
+    {
+     "date": "2020-10-01",
+     "value": 14959717.7757466,
+     "holdings": 60,
+     "covered": 57,
+     "uncovered": 3,
+     "quality": "reported"
+    },
+    {
+     "date": "2021-01-01",
+     "value": 9335371.249657447,
+     "holdings": 61,
+     "covered": 57,
+     "uncovered": 4,
+     "quality": "mixed"
+    },
+    {
+     "date": "2021-04-01",
+     "value": 9199491.885095071,
+     "holdings": 58,
+     "covered": 55,
+     "uncovered": 3,
+     "quality": "mixed"
+    },
+    {
+     "date": "2021-07-01",
+     "value": 8633016.113919621,
+     "holdings": 59,
+     "covered": 56,
+     "uncovered": 3,
+     "quality": "mixed"
+    },
+    {
+     "date": "2021-10-01",
+     "value": 8028453.38387432,
+     "holdings": 59,
+     "covered": 55,
+     "uncovered": 4,
+     "quality": "mixed"
+    },
+    {
+     "date": "2022-01-01",
+     "value": 7551080.751682238,
+     "holdings": 59,
+     "covered": 55,
+     "uncovered": 4,
+     "quality": "reported"
+    },
+    {
+     "date": "2022-04-01",
+     "value": 7477793.724845824,
+     "holdings": 59,
+     "covered": 54,
+     "uncovered": 5,
+     "quality": "reported"
+    },
+    {
+     "date": "2022-07-01",
+     "value": 7538481.69972186,
+     "holdings": 59,
+     "covered": 55,
+     "uncovered": 4,
+     "quality": "reported"
+    },
+    {
+     "date": "2022-10-01",
+     "value": 7530989.575623223,
+     "holdings": 58,
+     "covered": 55,
+     "uncovered": 3,
+     "quality": "reported"
+    },
+    {
+     "date": "2023-01-01",
+     "value": 7656777.8828924885,
+     "holdings": 59,
+     "covered": 56,
+     "uncovered": 3,
+     "quality": "mixed"
+    },
+    {
+     "date": "2023-04-01",
+     "value": 7560490.637121881,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "mixed"
+    },
+    {
+     "date": "2023-07-01",
+     "value": 6975833.328567793,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "mixed"
+    },
+    {
+     "date": "2023-10-01",
+     "value": 6718468.107222345,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "mixed"
+    },
+    {
+     "date": "2024-01-01",
+     "value": 6857670.995813539,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2024-04-01",
+     "value": 6681514.554972055,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2024-07-01",
+     "value": 6553043.9789052745,
+     "holdings": 58,
+     "covered": 56,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2024-10-01",
+     "value": 6571885.307930196,
+     "holdings": 57,
+     "covered": 55,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2025-01-01",
+     "value": 4797704.826234087,
+     "holdings": 55,
+     "covered": 52,
+     "uncovered": 3,
+     "quality": "estimated"
+    },
+    {
+     "date": "2025-04-01",
+     "value": 4822199.987983752,
+     "holdings": 55,
+     "covered": 53,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2025-07-01",
+     "value": 4804544.85583796,
+     "holdings": 55,
+     "covered": 53,
+     "uncovered": 2,
+     "quality": "estimated"
+    }
+   ],
+   "decomposition": [
+    {
+     "from": "2020-07-01",
+     "to": "2020-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 766799.4224598095,
+     "total": 766799.4224598095
+    },
+    {
+     "from": "2020-10-01",
+     "to": "2021-01-01",
+     "emissions": 1473287.8523688957,
+     "valuation": -6950573.779901692,
+     "allocation": -147060.59855635907,
+     "total": -5624346.526089155
+    },
+    {
+     "from": "2021-01-01",
+     "to": "2021-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -135879.3645623781,
+     "total": -135879.3645623781
+    },
+    {
+     "from": "2021-04-01",
+     "to": "2021-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -566475.771175444,
+     "total": -566475.771175444
+    },
+    {
+     "from": "2021-07-01",
+     "to": "2021-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -604562.7300453013,
+     "total": -604562.7300453013
+    },
+    {
+     "from": "2021-10-01",
+     "to": "2022-01-01",
+     "emissions": -772327.5757779283,
+     "valuation": 448944.2162861094,
+     "allocation": -153989.2727002642,
+     "total": -477372.63219208317
+    },
+    {
+     "from": "2022-01-01",
+     "to": "2022-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -73287.02683641254,
+     "total": -73287.02683641254
+    },
+    {
+     "from": "2022-04-01",
+     "to": "2022-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 60687.97487603731,
+     "total": 60687.97487603731
+    },
+    {
+     "from": "2022-07-01",
+     "to": "2022-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -7492.124098636836,
+     "total": -7492.124098636836
+    },
+    {
+     "from": "2022-10-01",
+     "to": "2023-01-01",
+     "emissions": -176242.32664126993,
+     "valuation": 443562.1146813463,
+     "allocation": -141531.48077081252,
+     "total": 125788.30726926387
+    },
+    {
+     "from": "2023-01-01",
+     "to": "2023-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -96287.24577060995,
+     "total": -96287.24577060995
+    },
+    {
+     "from": "2023-04-01",
+     "to": "2023-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -584657.3085540867,
+     "total": -584657.3085540867
+    },
+    {
+     "from": "2023-07-01",
+     "to": "2023-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -257365.2213454478,
+     "total": -257365.2213454478
+    },
+    {
+     "from": "2023-10-01",
+     "to": "2024-01-01",
+     "emissions": -745330.2152365891,
+     "valuation": 1051996.8035583377,
+     "allocation": -167463.69973055372,
+     "total": 139202.88859119493
+    },
+    {
+     "from": "2024-01-01",
+     "to": "2024-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -176156.4408414835,
+     "total": -176156.4408414835
+    },
+    {
+     "from": "2024-04-01",
+     "to": "2024-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -128470.57606678254,
+     "total": -128470.57606678254
+    },
+    {
+     "from": "2024-07-01",
+     "to": "2024-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 18841.329024922114,
+     "total": 18841.329024922114
+    },
+    {
+     "from": "2024-10-01",
+     "to": "2025-01-01",
+     "emissions": -79730.84797866968,
+     "valuation": -500756.38381365256,
+     "allocation": -1193693.249903785,
+     "total": -1774180.4816961074
+    },
+    {
+     "from": "2025-01-01",
+     "to": "2025-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 24495.161749663806,
+     "total": 24495.161749663806
+    },
+    {
+     "from": "2025-04-01",
+     "to": "2025-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -17655.132145790827,
+     "total": -17655.132145790827
+    }
+   ],
+   "cumulative": {
+    "emissions": -300343.1132655614,
+    "valuation": -5506827.029189551,
+    "allocation": -3581203.354993716,
+    "total": -9388373.497448828
+   },
+   "headline": {
+    "start": 14192918.353286786,
+    "end": 4804544.85583796,
+    "pct_change": -66.14829497187007,
+    "start_date": "2020-07-01",
+    "end_date": "2025-07-01"
+   }
+  },
+  "PortfolioHoldings::drift": {
+   "name": "PortfolioHoldings",
+   "variant": "drift",
+   "meta": {
+    "id": "drift",
+    "label": "Drift-corrected",
+    "short": "Current + calibrated drift",
+    "description": "As Current, plus a calibrated downward drift of 4.5% per year of horizon, which is the median rate at which company intensities actually fall in this dataset.",
+    "caveat": "The drift term is fitted on the backtest and must be recalibrated whenever the data is refreshed. Treat it as a parameter, not a constant.",
+    "params": {
+     "cap_mode": "anchor",
+     "drift_offset": 0.045,
+     "sales_mode": "latest"
+    }
+   },
+   "series": [
+    {
+     "date": "2020-07-01",
+     "value": 14192918.353286786,
+     "holdings": 61,
+     "covered": 57,
+     "uncovered": 4,
+     "quality": "reported"
+    },
+    {
+     "date": "2020-10-01",
+     "value": 14959717.7757466,
+     "holdings": 60,
+     "covered": 57,
+     "uncovered": 3,
+     "quality": "reported"
+    },
+    {
+     "date": "2021-01-01",
+     "value": 9335371.249657447,
+     "holdings": 61,
+     "covered": 57,
+     "uncovered": 4,
+     "quality": "mixed"
+    },
+    {
+     "date": "2021-04-01",
+     "value": 9199491.885095071,
+     "holdings": 58,
+     "covered": 55,
+     "uncovered": 3,
+     "quality": "mixed"
+    },
+    {
+     "date": "2021-07-01",
+     "value": 8633016.113919621,
+     "holdings": 59,
+     "covered": 56,
+     "uncovered": 3,
+     "quality": "mixed"
+    },
+    {
+     "date": "2021-10-01",
+     "value": 8028453.38387432,
+     "holdings": 59,
+     "covered": 55,
+     "uncovered": 4,
+     "quality": "mixed"
+    },
+    {
+     "date": "2022-01-01",
+     "value": 7551080.751682238,
+     "holdings": 59,
+     "covered": 55,
+     "uncovered": 4,
+     "quality": "reported"
+    },
+    {
+     "date": "2022-04-01",
+     "value": 7477793.724845825,
+     "holdings": 59,
+     "covered": 54,
+     "uncovered": 5,
+     "quality": "reported"
+    },
+    {
+     "date": "2022-07-01",
+     "value": 7538481.69972186,
+     "holdings": 59,
+     "covered": 55,
+     "uncovered": 4,
+     "quality": "reported"
+    },
+    {
+     "date": "2022-10-01",
+     "value": 7530989.575623223,
+     "holdings": 58,
+     "covered": 55,
+     "uncovered": 3,
+     "quality": "reported"
+    },
+    {
+     "date": "2023-01-01",
+     "value": 7656721.345562735,
+     "holdings": 59,
+     "covered": 56,
+     "uncovered": 3,
+     "quality": "mixed"
+    },
+    {
+     "date": "2023-04-01",
+     "value": 7560434.723293596,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "mixed"
+    },
+    {
+     "date": "2023-07-01",
+     "value": 6975777.803836848,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "mixed"
+    },
+    {
+     "date": "2023-10-01",
+     "value": 6718414.4773143865,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "mixed"
+    },
+    {
+     "date": "2024-01-01",
+     "value": 6558868.816652309,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2024-04-01",
+     "value": 6390329.906992488,
+     "holdings": 59,
+     "covered": 57,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2024-07-01",
+     "value": 6267425.420922634,
+     "holdings": 58,
+     "covered": 56,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2024-10-01",
+     "value": 6285300.406185759,
+     "holdings": 57,
+     "covered": 55,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2025-01-01",
+     "value": 4390600.831480452,
+     "holdings": 55,
+     "covered": 52,
+     "uncovered": 3,
+     "quality": "estimated"
+    },
+    {
+     "date": "2025-04-01",
+     "value": 4412987.723691732,
+     "holdings": 55,
+     "covered": 53,
+     "uncovered": 2,
+     "quality": "estimated"
+    },
+    {
+     "date": "2025-07-01",
+     "value": 4396781.585737988,
+     "holdings": 55,
+     "covered": 53,
+     "uncovered": 2,
+     "quality": "estimated"
+    }
+   ],
+   "decomposition": [
+    {
+     "from": "2020-07-01",
+     "to": "2020-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 766799.4224598095,
+     "total": 766799.4224598095
+    },
+    {
+     "from": "2020-10-01",
+     "to": "2021-01-01",
+     "emissions": 1473287.8523688957,
+     "valuation": -6950573.779901692,
+     "allocation": -147060.59855635907,
+     "total": -5624346.526089155
+    },
+    {
+     "from": "2021-01-01",
+     "to": "2021-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -135879.3645623781,
+     "total": -135879.3645623781
+    },
+    {
+     "from": "2021-04-01",
+     "to": "2021-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -566475.771175444,
+     "total": -566475.771175444
+    },
+    {
+     "from": "2021-07-01",
+     "to": "2021-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -604562.7300453013,
+     "total": -604562.7300453013
+    },
+    {
+     "from": "2021-10-01",
+     "to": "2022-01-01",
+     "emissions": -772327.5757779283,
+     "valuation": 448944.21628610947,
+     "allocation": -153989.27270026424,
+     "total": -477372.6321920831
+    },
+    {
+     "from": "2022-01-01",
+     "to": "2022-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -73287.02683641254,
+     "total": -73287.02683641254
+    },
+    {
+     "from": "2022-04-01",
+     "to": "2022-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 60687.97487603731,
+     "total": 60687.97487603731
+    },
+    {
+     "from": "2022-07-01",
+     "to": "2022-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -7492.124098636836,
+     "total": -7492.124098636836
+    },
+    {
+     "from": "2022-10-01",
+     "to": "2023-01-01",
+     "emissions": -176313.69497057216,
+     "valuation": 443576.3850024351,
+     "allocation": -141530.9200923527,
+     "total": 125731.76993951024
+    },
+    {
+     "from": "2023-01-01",
+     "to": "2023-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -96286.62226914197,
+     "total": -96286.62226914197
+    },
+    {
+     "from": "2023-04-01",
+     "to": "2023-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -584656.9194567458,
+     "total": -584656.9194567458
+    },
+    {
+     "from": "2023-07-01",
+     "to": "2023-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -257363.32652246,
+     "total": -257363.32652246
+    },
+    {
+     "from": "2023-10-01",
+     "to": "2024-01-01",
+     "emissions": -1004343.7187086924,
+     "valuation": 1004918.4428836235,
+     "allocation": -160120.38483701102,
+     "total": -159545.66066207984
+    },
+    {
+     "from": "2024-01-01",
+     "to": "2024-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -168538.90965981976,
+     "total": -168538.90965981976
+    },
+    {
+     "from": "2024-04-01",
+     "to": "2024-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -122904.48606985464,
+     "total": -122904.48606985464
+    },
+    {
+     "from": "2024-07-01",
+     "to": "2024-10-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 17874.985263124294,
+     "total": 17874.985263124294
+    },
+    {
+     "from": "2024-10-01",
+     "to": "2025-01-01",
+     "emissions": -345262.0472167597,
+     "valuation": -458289.94708405103,
+     "allocation": -1091147.5804044958,
+     "total": -1894699.5747053064
+    },
+    {
+     "from": "2025-01-01",
+     "to": "2025-04-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": 22386.892211280698,
+     "total": 22386.892211280698
+    },
+    {
+     "from": "2025-04-01",
+     "to": "2025-07-01",
+     "emissions": 0.0,
+     "valuation": 0.0,
+     "allocation": -16206.137953744766,
+     "total": -16206.137953744766
+    }
+   ],
+   "cumulative": {
+    "emissions": -824959.1843050569,
+    "valuation": -5511424.682813575,
+    "allocation": -3459752.900430171,
+    "total": -9796136.767548801
+   },
+   "headline": {
+    "start": 14192918.353286786,
+    "end": 4396781.585737988,
+    "pct_change": -69.02130008575872,
+    "start_date": "2020-07-01",
+    "end_date": "2025-07-01"
+   }
+  }
+ },
+ "portfolios_meta": [
+  {
+   "name": "PortfolioHoldings",
+   "periods": 21,
+   "holdings": 81,
+   "start": "2020-07-01",
+   "end": "2025-07-01"
+  }
+ ]
+}

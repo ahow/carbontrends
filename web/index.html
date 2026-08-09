@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carbon Attribution — Financed Emissions Dashboard</title>
+<meta name="description" content="Institutional dashboard for attributed financed emissions: model A/B comparison, portfolio decomposition and backtest evidence. Reported carbon data ends 2023; later years are modelled.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23002A5C'/%3E%3Cpath d='M6 22h20' stroke='%2300A3D7' stroke-width='2'/%3E%3Cpath d='M6 17l6-5 5 4 9-9' stroke='%23fff' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="shell">
+  <!-- ---------------------------------------------------------------- nav -->
+  <aside class="sidebar">
+   <div class="sidebar-inner">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" width="28" height="28" aria-label="Carbon attribution mark" role="img" fill="none">
+        <path d="M3 27h26" stroke="#00A3D7" stroke-width="2"/>
+        <path d="M4 21l7-6 5 4 10-11" stroke="#FFFFFF" stroke-width="2"/>
+        <path d="M22 8h4v4" stroke="#00A3D7" stroke-width="2"/>
+        <circle cx="11" cy="15" r="1.8" fill="#FFFFFF"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">Carbon Attribution</span>
+        <span class="brand-sub">Financed emissions research</span>
+      </div>
+    </div>
+
+    <nav aria-label="Views">
+      <ul class="nav" id="nav">
+        <li><a href="#/company"   data-view="company"   data-testid="nav-company">Company</a></li>
+        <li><a href="#/portfolio" data-view="portfolio" data-testid="nav-portfolio">Portfolio</a></li>
+        <li><a href="#/evidence"  data-view="evidence"  data-testid="nav-evidence">Model evidence</a></li>
+        <li><a href="#/method"    data-view="method"    data-testid="nav-method">Method</a></li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-foot">
+      <p class="basis-key" id="sidebar-basis" data-testid="sidebar-basis">
+        <span class="key-row"><span class="key-line solid"></span>Reported carbon data</span>
+        <span class="key-row"><span class="key-line dashed"></span>Modelled (no reported data)</span>
+      </p>
+      <p class="sidebar-note" id="sidebar-disclosure" data-testid="sidebar-disclosure">Loading dataset metadata…</p>
+    </div>
+   </div>
+  </aside>
+
+  <!-- --------------------------------------------------------------- main -->
+  <main id="main" class="content">
+    <header class="topbar">
+      <div>
+        <h1 id="view-title" data-testid="view-title">Company</h1>
+        <p class="topbar-sub" id="view-sub" data-testid="view-sub"></p>
+      </div>
+      <div class="topbar-meta" id="topbar-meta" data-testid="topbar-meta"></div>
+    </header>
+
+    <!-- ============================================================ COMPANY -->
+    <section class="view" id="view-company" data-testid="view-company">
+      <form class="controls" id="company-controls" autocomplete="off" onsubmit="return false">
+        <div class="field field-search">
+          <label for="company-search">Company</label>
+          <input type="search" id="company-search" name="company-search" placeholder="Search name or ISIN" data-testid="input-company-search" aria-describedby="company-search-hint" role="combobox" aria-expanded="false" aria-controls="company-results">
+          <p class="field-hint" id="company-search-hint">Minimum two characters. Results from the reference universe.</p>
+          <ul class="results" id="company-results" data-testid="list-company-results" role="listbox" hidden></ul>
+        </div>
+        <div class="field field-amount">
+          <label for="investment">Investment amount</label>
+          <input type="text" inputmode="numeric" id="investment" name="investment" value="1,000,000" data-testid="input-investment">
+          <p class="field-hint">Attribution scales linearly with the amount invested.</p>
+        </div>
+        <fieldset class="field field-variants">
+          <legend>Model variants (A/B)</legend>
+          <div class="variant-checks" id="variant-checks" data-testid="variant-checks"></div>
+        </fieldset>
+      </form>
+
+      <div class="selected-company" id="selected-company" data-testid="selected-company" hidden></div>
+
+      <h2 class="section-h">Headline reduction</h2>
+      <p class="section-note">Two bases, shown with equal weight. The reported-only figure is the only one built entirely from disclosed carbon data.</p>
+      <div class="cards" id="company-cards" data-testid="company-cards"></div>
+
+      <h2 class="section-h">Monthly attributed emissions</h2>
+      <div class="panel" id="company-chart-panel">
+        <div class="panel-head">
+          <div>
+            <h3 class="panel-title">Attributed emissions per month</h3>
+            <p class="panel-sub" id="company-chart-sub"></p>
+          </div>
+          <div class="chart-legend" id="company-legend" data-testid="company-legend"></div>
+        </div>
+        <div class="chart-wrap chart-tall"><canvas id="company-chart" data-testid="chart-company"></canvas></div>
+        <p class="caption" id="company-caption"></p>
+      </div>
+
+      <h2 class="section-h">Annual totals</h2>
+      <div class="panel">
+        <div class="table-scroll">
+          <table class="data-table" id="company-annual-table" data-testid="table-company-annual"></table>
+        </div>
+      </div>
+
+      <h2 class="section-h">Variant definitions and caveats</h2>
+      <div class="notes" id="variant-notes" data-testid="variant-notes"></div>
+    </section>
+
+    <!-- ========================================================== PORTFOLIO -->
+    <section class="view" id="view-portfolio" data-testid="view-portfolio" hidden>
+      <form class="controls" id="portfolio-controls" onsubmit="return false">
+        <div class="field">
+          <label for="portfolio-pick">Portfolio</label>
+          <select id="portfolio-pick" data-testid="select-portfolio"></select>
+          <p class="field-hint" id="portfolio-hint"></p>
+        </div>
+        <div class="field">
+          <label for="portfolio-variant">Model variant</label>
+          <select id="portfolio-variant" data-testid="select-portfolio-variant"></select>
+          <p class="field-hint">Applies to the estimated years only.</p>
+        </div>
+      </form>
+
+      <div id="portfolio-coverage" data-testid="portfolio-coverage"></div>
+      <div id="portfolio-finding" data-testid="portfolio-finding"></div>
+
+      <h2 class="section-h">Attributed emissions</h2>
+      <div class="cards" id="portfolio-cards" data-testid="portfolio-cards"></div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3 class="panel-title">Quarterly attributed emissions</h3>
+            <p class="panel-sub" id="portfolio-chart-sub"></p>
+          </div>
+          <div class="chart-legend" id="portfolio-legend"></div>
+        </div>
+        <div class="chart-wrap"><canvas id="portfolio-chart" data-testid="chart-portfolio"></canvas></div>
+        <p class="caption" id="portfolio-caption"></p>
+      </div>
+
+      <h2 class="section-h">Decomposition of the change</h2>
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3 class="panel-title">Start → emissions → valuation → allocation → End</h3>
+            <p class="panel-sub" id="waterfall-sub"></p>
+          </div>
+        </div>
+        <div class="chart-wrap chart-tall"><canvas id="waterfall-chart" data-testid="chart-waterfall"></canvas></div>
+        <p class="caption" id="waterfall-caption"></p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3 class="panel-title">The three effects on their own scale</h3>
+            <p class="panel-sub" id="effects-sub"></p>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="effects-chart" data-testid="chart-effects"></canvas></div>
+        <p class="caption" id="effects-caption"></p>
+      </div>
+
+      <h2 class="section-h">Same book, three variants</h2>
+      <div class="panel">
+        <div class="table-scroll">
+          <table class="data-table" id="variant-compare" data-testid="table-variant-compare"></table>
+        </div>
+        <p class="caption" id="variant-compare-caption"></p>
+      </div>
+
+      <h2 class="section-h">Per-period decomposition</h2>
+      <div class="panel">
+        <div class="table-scroll">
+          <table class="data-table" id="decomp-table" data-testid="table-decomposition"></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================== EVIDENCE -->
+    <section class="view" id="view-evidence" data-testid="view-evidence" hidden>
+      <div id="evidence-status" data-testid="evidence-status"></div>
+      <div id="evidence-body" hidden>
+        <div id="evidence-finding" data-testid="evidence-finding"></div>
+        <h2 class="section-h">Out-of-sample error by horizon</h2>
+        <p class="section-note" id="evidence-note"></p>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="data-table" id="evidence-table" data-testid="table-backtest"></table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h3 class="panel-title">Median absolute error by horizon</h3>
+              <p class="panel-sub">Lower is better. Persistence = carrying the last reported intensity forward unchanged.</p>
+            </div>
+            <div class="chart-legend" id="evidence-legend"></div>
+          </div>
+          <div class="chart-wrap"><canvas id="error-chart" data-testid="chart-error"></canvas></div>
+          <p class="caption">A variant only earns its complexity where it sits below the persistence benchmark.</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h3 class="panel-title">Median signed bias by horizon</h3>
+              <p class="panel-sub">Positive bars read high — the model overstates emissions and therefore understates decarbonisation.</p>
+            </div>
+          </div>
+          <div class="chart-wrap"><canvas id="bias-chart" data-testid="chart-bias"></canvas></div>
+          <p class="caption">Zero line in Prussian Navy. Bias is a median across companies, so individual errors are larger.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= METHOD -->
+    <section class="view" id="view-method" data-testid="view-method" hidden>
+      <div class="disclosure" id="method-disclosure" data-testid="method-disclosure"></div>
+      <div class="prose" id="method-body"></div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="assets/app.js"></script>
+</body>
+</html>

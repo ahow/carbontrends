@@ -119,16 +119,82 @@ Defaults when a sector lacks data: threshold `log(1.5)`, no growth.
 ### 6.6 Capping and confidence bands
 
 - Every estimate is capped via `cap_to_median`. **Interpolation** caps use the **full-history median**; **extrapolation** caps use the **post-break (current-regime) median**. Using the wrong median lets the tail escape (this exact bug produced a 15× worse mean error during development).
+- **Sales fallback (fixed).** The most recent actual sales figure is now taken from any year with positive sales, not from years with *both* carbon and sales. Carbon reporting lags revenue by ~2 years, so the old rule reverted to 2023 and discarded the 2024/2025 actuals present in the workbook. Measured effect on 2026 attributed emissions across 248 companies: median **+2.8%**, mean **+5.5%** (p10 −10.1%, p90 +23.3%). Reported years are bit-identical.
 - Empirically calibrated relative half-widths (`band_for`): `reported = 0.08`, `interpolated = 0.11`, extrapolated by horizon `{1: 0.16, 2: 0.17, 3: 0.18}`, floor `0.20` beyond. Monthly `lower/upper = value × (1 ∓ band)`.
 - Single-report companies: value held constant for all targets (`reported` at the source year, `extrapolated` elsewhere).
 
 ### 6.7 Validated accuracy (7,134 companies, ≥6 reported years)
 
-| Scenario | Baseline (OLS+cap) median abs err | Full pipeline | Mean (tail) |
+**Superseded.** The figures previously reported here were produced by a harness
+with two defects, both fixed in `backtest_methodology.py`:
+
+1. **Horizons were mislabelled.** The recent-year holdout hid every year at and
+   after the target, so the last visible year was always `target - 1`. Every
+   scenario was a one-step-ahead forecast with less history, not a genuine 2- or
+   3-year-ahead forecast. Multi-year error was understated as a result
+   (+3yr: reported 17.9%, actual 29.9%).
+2. **The only benchmark was a strawman.** `baseline (OLS+cap)` fits a linear
+   trend in level space, which is a poor reference for a noisy multiplicative
+   series. Naive benchmarks were never tested.
+
+Corrected results (last K reported years hidden jointly; median absolute error,
+p90, and median signed bias):
+
+| Estimator | +1yr | +2yr | +3yr | Interpolation |
+|---|---|---|---|---|
+| BM persistence | 14.0% | 22.4% | 28.5% | — |
+| BM log-linear | 14.0% | 22.4% | 28.5% | **9.1%** |
+| BM sector-drift | 13.9% | 22.2% | 28.1% | — |
+| BM sector-drift debiased | **13.2%** | **20.0%** | **24.0%** | — |
+| baseline (OLS+cap) | 28.6% | 34.4% | 39.7% | 17.4% |
+| full pipeline | 16.2% | 23.4% | 29.9% | 10.7% |
+
+| Median signed bias | +1yr | +2yr | +3yr |
 |---|---|---|---|
-| Interpolation (interior gap) | 17.4% | **10.6%** | 163% → 112% |
-| Extrapolation +1yr | 28.6% | **16.2%** | 406% → 60% |
-| Extrapolation +3yr | 27.9% | **17.9%** | 923% → 61% |
+| full pipeline | +5.8% | +9.1% | **+15.2%** |
+| BM sector-drift debiased | −0.8% | −2.2% | −0.7% |
+
+**Interpretation.** The pipeline is beaten by naive persistence at every
+forecast horizon and by log-linear interpolation on interior gaps, on median
+error, p90 and share of errors above 50%. It also carries a large positive bias:
+it predicts a median year-on-year intensity change of −0.17% against an actual
+of −4.28%, so it systematically *understates* decarbonisation, increasingly so
+with horizon. The dominant mechanism is `cap_to_median` — for 17.7% of companies
+the last reported value already sits below the `median/1.5` floor, so forward
+estimates are forced back up above the company's own latest reported intensity.
+Those are precisely the fastest decarbonisers.
+
+Reproduce with `python backtest_methodology.py`; cap-binding and band-coverage
+evidence with `python diagnostics.py`.
+
+### 6.7b Effect of re-anchoring the extrapolation cap
+
+`cap_to_median` is no longer used for forward extrapolation. `cap_to_anchor`
+caps around the **last observed value** in the retained regime, with a band of
+`1.4 ** horizon`, so a sustained decline is no longer clamped back upward.
+
+| | +1yr | +2yr | +3yr |
+|---|---|---|---|
+| median abs err, median-anchored cap | 16.2% | 23.4% | 29.9% |
+| median abs err, last-value anchor | **14.3%** | **21.8%** | **28.8%** |
+| signed bias, median-anchored cap | +5.8% | +9.1% | +15.2% |
+| signed bias, last-value anchor | **+2.8%** | **+5.9%** | **+12.5%** |
+
+Bias roughly halves at +1yr and +2yr. Interpolation is unaffected (10.65%),
+since interior gaps still use the median cap. In the harness the old behaviour
+remains visible as `full (+shrinkage)`, giving a like-for-like comparison in a
+single run.
+
+Residual bias of +12.5% at +3yr is **not** a capping problem -- it is the
+absence of a drift term. See the `BM sector-drift debiased` benchmark.
+
+### 6.8 Confidence bands are not confidence bands
+
+`band_for` returns median absolute error, so the intervals are approximately 50%
+intervals. Measured coverage of the stated ±16% band at h=1 is **49.6%**; a
+genuine 95% interval would need roughly ±110%. They are also symmetric on a
+strictly positive multiplicative quantity. Rebase on empirical quantiles by
+horizon and state the coverage level wherever they are displayed.
 
 ## 7. Monthly smoothing (annual-total preserving)
 
