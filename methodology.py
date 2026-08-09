@@ -94,13 +94,49 @@ def median_log_growth(years: Sequence[int], values: Sequence[float]) -> Optional
 
 def cap_to_median(value: float, median: float, is_extrapolation: bool,
                   extrap_factor: float = 1.5, interp_factor: float = 2.0) -> float:
-    """Legacy adaptive capping around the series median."""
+    """Legacy adaptive capping around the series median.
+
+    Retained for interpolation and for the legacy baseline estimator in the
+    backtest registry. NOT used for forward extrapolation any more -- see
+    cap_to_anchor for why.
+    """
     factor = extrap_factor if is_extrapolation else interp_factor
     lo = median / factor
     hi = median * factor
     capped = float(np.clip(value, lo, hi))
     if capped <= 0:
         capped = median * 0.5
+    return capped
+
+
+# Per-year width of the extrapolation sanity band. A forecast may drift by up
+# to this factor per year of horizon away from the last observed value before
+# it is treated as implausible.
+ANCHOR_CAP_FACTOR = 1.4
+
+
+def cap_to_anchor(value: float, anchor: float, horizon: int,
+                  factor: float = ANCHOR_CAP_FACTOR) -> float:
+    """Cap a forward estimate around the LAST OBSERVED value, not the median.
+
+    Capping extrapolations to [median/1.5, median*1.5] of the retained regime
+    is wrong for a trending series. A company that has decarbonised steadily
+    ends well below its own regime median, so the floor sits *above* its most
+    recent reported intensity and every forward estimate is dragged back up.
+    On the current dataset this affects 17.7% of companies, and they are by
+    construction the fastest decarbonisers -- the exact population the
+    dashboard exists to identify.
+
+    Anchoring on the last observed value keeps the guard against runaway
+    extrapolation while allowing a genuine trend to continue. The band widens
+    with horizon because uncertainty compounds.
+    """
+    if anchor <= 0 or horizon <= 0:
+        return float(value)
+    span = factor ** horizon
+    capped = float(np.clip(value, anchor / span, anchor * span))
+    if capped <= 0:
+        capped = anchor * 0.5
     return capped
 
 
@@ -377,7 +413,12 @@ def estimate_intensity_series(
             horizon = ty - last_year
             if est is None:
                 continue
-            est = cap_to_median(est, extrap_median, is_extrapolation=True)
+            # Anchor the sanity cap on the last observed value in the retained
+            # regime rather than that regime's median, so a sustained decline
+            # is not clamped back upward. See cap_to_anchor.
+            anchor = float(extrap_vals[-1]) if len(extrap_vals) else extrap_median
+            steps = int(ty - extrap_years[-1]) if len(extrap_years) else horizon
+            est = cap_to_anchor(est, anchor, steps)
 
         if est is None:
             continue

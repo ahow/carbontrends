@@ -207,13 +207,25 @@ class CarbonCalculator:
                 sector_log_growth=sector_log_growth,
             )
 
-            # Most recent reported sales, used to hold sales flat for forward years
-            # (sales projection is intentionally conservative - the validated work
-            # is on carbon intensity, not revenue).
+            # Most recent ACTUAL sales, used to hold revenue flat for any year
+            # with no reported sales figure.
+            #
+            # This previously iterated over `reported`, i.e. years with BOTH
+            # carbon and sales. Carbon reporting lags revenue reporting by
+            # about two years, so the fallback silently reverted to the last
+            # joint year (2023 on the current dataset) and discarded the 2024
+            # and 2025 sales actuals that are present in the workbook. Since
+            # reconstructed emissions are intensity x sales, that understated
+            # absolute emissions in the nowcast years by roughly 11% and, more
+            # importantly, biased the reduction metric: intensity was allowed
+            # to fall while revenue was frozen, overstating decarbonisation.
+            #
+            # Iterate over every year with a positive sales figure instead.
             last_sales = None
-            for y in sorted(reported):
-                if intensity_data[y]['sales']:
-                    last_sales = intensity_data[y]['sales']
+            for y in sorted(intensity_data):
+                sv = intensity_data[y].get('sales')
+                if sv and sv > 0:
+                    last_sales = sv
 
             # Third pass: build final annual points from the estimated intensities.
             for year_int in target_years:

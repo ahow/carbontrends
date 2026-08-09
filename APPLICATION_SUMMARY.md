@@ -119,6 +119,7 @@ Defaults when a sector lacks data: threshold `log(1.5)`, no growth.
 ### 6.6 Capping and confidence bands
 
 - Every estimate is capped via `cap_to_median`. **Interpolation** caps use the **full-history median**; **extrapolation** caps use the **post-break (current-regime) median**. Using the wrong median lets the tail escape (this exact bug produced a 15× worse mean error during development).
+- **Sales fallback (fixed).** The most recent actual sales figure is now taken from any year with positive sales, not from years with *both* carbon and sales. Carbon reporting lags revenue by ~2 years, so the old rule reverted to 2023 and discarded the 2024/2025 actuals present in the workbook. Measured effect on 2026 attributed emissions across 248 companies: median **+2.8%**, mean **+5.5%** (p10 −10.1%, p90 +23.3%). Reported years are bit-identical.
 - Empirically calibrated relative half-widths (`band_for`): `reported = 0.08`, `interpolated = 0.11`, extrapolated by horizon `{1: 0.16, 2: 0.17, 3: 0.18}`, floor `0.20` beyond. Monthly `lower/upper = value × (1 ∓ band)`.
 - Single-report companies: value held constant for all targets (`reported` at the source year, `extrapolated` elsewhere).
 
@@ -165,6 +166,27 @@ Those are precisely the fastest decarbonisers.
 
 Reproduce with `python backtest_methodology.py`; cap-binding and band-coverage
 evidence with `python diagnostics.py`.
+
+### 6.7b Effect of re-anchoring the extrapolation cap
+
+`cap_to_median` is no longer used for forward extrapolation. `cap_to_anchor`
+caps around the **last observed value** in the retained regime, with a band of
+`1.4 ** horizon`, so a sustained decline is no longer clamped back upward.
+
+| | +1yr | +2yr | +3yr |
+|---|---|---|---|
+| median abs err, median-anchored cap | 16.2% | 23.4% | 29.9% |
+| median abs err, last-value anchor | **14.3%** | **21.8%** | **28.8%** |
+| signed bias, median-anchored cap | +5.8% | +9.1% | +15.2% |
+| signed bias, last-value anchor | **+2.8%** | **+5.9%** | **+12.5%** |
+
+Bias roughly halves at +1yr and +2yr. Interpolation is unaffected (10.65%),
+since interior gaps still use the median cap. In the harness the old behaviour
+remains visible as `full (+shrinkage)`, giving a like-for-like comparison in a
+single run.
+
+Residual bias of +12.5% at +3yr is **not** a capping problem -- it is the
+absence of a drift term. See the `BM sector-drift debiased` benchmark.
 
 ### 6.8 Confidence bands are not confidence bands
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Targeted diagnostics that the accuracy harness does not cover.
 
-1. Cap binding    - how often does cap_to_median override the last reported
-                    value, and in which direction?
+1. Cap binding    - how often WOULD the legacy median-anchored cap override
+                    the last reported value, and in which direction? Retained
+                    as the standing evidence for why the extrapolation cap is
+                    now anchored on the last observed value (cap_to_anchor).
 2. Band coverage  - do the stated confidence bands actually contain the
                     realised value at the advertised rate?
 
@@ -18,9 +20,11 @@ from backtest_methodology import (build_company_series, sector_map, load_real_da
 
 def cap_binding(series, i2s):
     print("\n=== CAP BINDING (extrapolation) ===")
-    print("cap_to_median clamps forward estimates to [median/1.5, median*1.5] of the")
-    print("current regime. Where the last reported value already sits outside that")
-    print("band, the cap overrides the company's own most recent observation.\n")
+    print("The legacy cap clamped forward estimates to [median/1.5, median*1.5] of")
+    print("the current regime. Where the last reported value already sits outside")
+    print("that band, the cap overrode the company's own most recent observation.")
+    print("Forward extrapolation now uses cap_to_anchor instead; this check")
+    print("quantifies the population that was affected.\n")
     up = dn = tot = 0
     worst = []
     for isin, ints in series.items():
