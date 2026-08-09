@@ -357,8 +357,24 @@ function drawChart(data) {
     });
   }
   const agree = present.length > 1 && maxRel < 0.02;
+
+  // Modelled years INSIDE the reported span are easy to miss: only ~3% of
+  // companies have an interior reporting gap, and de-spiked years are rarer
+  // still. Both are genuinely modelled values sitting among reported ones, so
+  // count them explicitly rather than relying on the reader spotting a dotted
+  // segment one year wide.
+  const ann = data.series[focus].annual;
+  const interior = ann.filter((a) => a.quality !== 'reported'
+    && a.year <= meta.carbon_years.last).map((a) => a.year);
+  const interiorNote = interior.length
+    ? ` ${interior.length} year${interior.length > 1 ? 's' : ''} inside the reported span `
+      + `${interior.length > 1 ? 'are' : 'is'} modelled, not disclosed (${interior.join(', ')}) — `
+      + `either a reporting gap or a value the model treated as a spike and replaced.`
+    : ` Every year to ${meta.carbon_years.last} is disclosed carbon data, with no gaps or replaced values.`;
+
   document.getElementById('company-chart-sub').textContent =
     `Solid line = reported carbon data to ${meta.carbon_years.last}. Dashed line and shaded region = ${nowcastYears}, model output.`
+    + interiorNote
     + (agree
       ? ` Over the reported span the variants differ by at most ${pct(maxRel * 100)}, so they plot on top of one another; they diverge only where the data ends.`
       : '');
