@@ -1,4 +1,10 @@
 // Thin fetch layer. Errors are surfaced, never swallowed.
+
+// API base. Same-origin when served by FastAPI (local, Docker, Railway).
+// deploy_website rewrites the __PORT_8000__ token to a proxy path, which is
+// how the hosted preview reaches the Python backend.
+const PORT_TOKEN = '__PORT_8000__';
+export const API_BASE = PORT_TOKEN.startsWith('__') ? '' : PORT_TOKEN;
 export class ApiError extends Error {
   constructor(status, detail, url) {
     super(detail || `Request failed (${status})`);
@@ -11,7 +17,7 @@ export class ApiError extends Error {
 async function get(path) {
   let res;
   try {
-    res = await fetch(path, { headers: { Accept: 'application/json' } });
+    res = await fetch(API_BASE + path, { headers: { Accept: 'application/json' } });
   } catch (e) {
     throw new ApiError(0, `Network error contacting the API (${e.message})`, path);
   }
