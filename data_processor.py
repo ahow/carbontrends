@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Any
-import streamlit as st
+import ui_messages as st  # Streamlit-compatible shim; see ui_messages.py
 
 class DataProcessor:
     """Handles loading and preprocessing of Excel data files."""

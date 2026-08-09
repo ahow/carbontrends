@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
-import streamlit as st
+import ui_messages as st  # Streamlit-compatible shim; see ui_messages.py
 
 
 class PortfolioAnalyzer:

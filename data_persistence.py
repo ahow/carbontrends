@@ -11,7 +11,7 @@ import os
 import pickle
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-import streamlit as st
+import ui_messages as st  # Streamlit-compatible shim; see ui_messages.py
 
 
 class DataPersistence:

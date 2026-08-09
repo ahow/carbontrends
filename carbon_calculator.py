@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple
 from scipy import interpolate
-import streamlit as st
+import ui_messages as st  # Streamlit-compatible shim; see ui_messages.py
 
 import methodology as M
 
