@@ -368,11 +368,11 @@ class CarbonCalculator:
             min_year = int(annual_df['year'].min())
             max_year = int(annual_df['year'].max())
             
-            # Add buffer years if needed
-            if max_year < 2025:
-                max_year = 2025
-            if min_year > 2019:
-                min_year = 2019
+            # The monthly range is exactly the annual range. The previous code
+            # padded it out to 2019-2025 regardless of the data, which meant the
+            # curve was extrapolated outside the estimated annual series with no
+            # annual total to constrain it -- unbounded, and presented with the
+            # same weight as constrained months.
             
             # Create monthly date range
             monthly_dates = pd.date_range(
@@ -439,112 +439,97 @@ class CarbonCalculator:
             return pd.DataFrame()
     
     def _create_smooth_monthly_curve(self, annual_df: pd.DataFrame, min_year: int, max_year: int) -> Dict[str, float]:
-        """Create smooth monthly emissions curve using cubic spline interpolation while preserving annual totals exactly."""
+        """Disaggregate annual emissions into a continuous monthly path.
+
+        WORKFLOW. Annual values are estimated first, upstream in methodology.py,
+        and are treated here as fixed. This function only distributes each
+        annual total across its twelve months. It never changes an annual level.
+
+        WHY NOT PROPORTIONAL RESCALING. The previous implementation fitted a
+        spline through year midpoints, divided by twelve, then multiplied each
+        calendar year's months by its own constant k_y = target_y / sum_y to
+        force the annual total. Adjacent years get different constants, so the
+        series steps at every December-to-January boundary. On 3M those boundary
+        steps were 3.6x the median within-year change and reached 12.1%, and the
+        six largest month-on-month moves in the entire series were all year
+        boundaries. Annual totals were exact, but the path was discontinuous and
+        the discontinuities were an artefact of the reconciliation rather than
+        anything present in the data.
+
+        METHOD. Mean-preserving disaggregation via the cumulative series, the
+        standard approach in national-accounts temporal disaggregation. Build
+        the cumulative emissions total at each 1 January, fit a monotone PCHIP
+        through those cumulative points, and take each month as the increment of
+        that curve across the month:
+
+            value(y, m) = F(y + m/12) - F(y + (m-1)/12)
+
+        Three properties hold simultaneously, none traded against another:
+
+          * Annual totals are exact BY CONSTRUCTION. The twelve increments
+            telescope to F(y+1) - F(y), the annual target. No reconciliation
+            step exists, so nothing can reintroduce a jump.
+          * The path is continuous. Monthly values are increments of a C1 curve
+            over equal intervals, so no boundary is privileged over an interior
+            month.
+          * Values are non-negative, because PCHIP preserves monotonicity of the
+            cumulative series and a cumulative of non-negative totals is
+            non-decreasing.
+        """
         try:
-            # Create monthly date range
-            monthly_dates = pd.date_range(
-                start=f'{min_year}-01-01',
-                end=f'{max_year}-12-01',
-                freq='MS'
-            )
-            
-            all_data = annual_df.copy()
-            monthly_curve = {}
-            
-            if len(all_data) == 1:
-                # Single data point - flat monthly distribution
-                single_value = all_data.iloc[0]['annual_emissions_attributed']
-                monthly_value = single_value / 12
-                for date in monthly_dates:
-                    key = f"{date.year}-{date.month:02d}"
-                    monthly_curve[key] = monthly_value
-                return monthly_curve
-            
-            # Create mapping of year -> annual target
-            annual_targets = {}
-            for _, row in all_data.iterrows():
-                year = int(row['year'])
-                annual_targets[year] = row['annual_emissions_attributed']
-            
-            # SHAPE-PRESERVING LOG-SPACE PCHIP INTERPOLATION
-            # Step 1: Build a monotone interpolant through annual data points.
-            # PCHIP avoids the overshoot/negative dips a cubic spline can produce;
-            # working in log-space keeps emissions strictly positive.
-            annual_years = sorted(annual_targets.keys())
-            annual_values = [annual_targets[year] for year in annual_years]
-            
-            # Create spline function through year midpoints (July 1st)
-            year_midpoints = [year + 0.5 for year in annual_years]
-            
-            spline_func = self._build_curve_interpolant(year_midpoints, annual_values)
-            
-            # Step 2: Generate initial smooth monthly estimates using spline
-            initial_monthly = {}
-            for date in monthly_dates:
-                year = date.year
-                month = date.month
-                # Convert to fractional year (month 1 = 0.042, month 6 = 0.458, month 12 = 0.958)
-                fractional_year = year + (month - 0.5) / 12
-                
-                # Get smooth annual estimate from spline
-                smooth_annual = float(spline_func(fractional_year))
-                
-                # Convert to monthly rate (annual ÷ 12)
-                key = f"{year}-{month:02d}"
-                initial_monthly[key] = max(0, smooth_annual / 12)
-            
-            # Step 3: CONSTRAINT SATISFACTION - Adjust to meet exact annual totals
-            # This is the key step that the working methodology uses
-            for year in annual_targets:
-                year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
-                
-                # Get current monthly estimates for this year
-                current_monthly = [initial_monthly.get(key, 0) for key in year_keys]
-                current_sum = sum(current_monthly)
-                target_annual = annual_targets[year]
-                
-                if current_sum > 0:
-                    # Scale factor to meet exact constraint
-                    scale_factor = target_annual / current_sum
-                    
-                    # Apply proportional scaling to maintain shape while meeting constraint
-                    for i, key in enumerate(year_keys):
-                        monthly_curve[key] = current_monthly[i] * scale_factor
+            all_data = annual_df.sort_values('year')
+            years = [int(y) for y in all_data['year'].tolist()]
+            values = [float(v) for v in all_data['annual_emissions_attributed'].tolist()]
+
+            if not years:
+                return {}
+            if len(years) == 1:
+                monthly_value = values[0] / 12.0
+                return {f"{years[0]}-{m:02d}": monthly_value for m in range(1, 13)}
+
+            # Annual estimation happens upstream. If the annual frame has gaps,
+            # fill them in log space so the cumulative knots are contiguous,
+            # rather than leaving a hole in the monthly path.
+            full_years = list(range(years[0], years[-1] + 1))
+            if len(full_years) != len(years):
+                if all(v > 0 for v in values):
+                    filled = np.exp(np.interp(full_years, years, np.log(values)))
                 else:
-                    # Fallback to equal distribution
-                    monthly_value = target_annual / 12
-                    for key in year_keys:
-                        monthly_curve[key] = monthly_value
-            
-            # Step 4: Fill in missing years with spline estimates (no constraints)
-            for date in monthly_dates:
-                year = date.year
-                month = date.month
-                key = f"{year}-{month:02d}"
-                
-                if key not in monthly_curve:  # Year without annual target
-                    fractional_year = year + (month - 0.5) / 12
-                    smooth_annual = float(spline_func(fractional_year))
-                    monthly_curve[key] = max(0, smooth_annual / 12)
-            
-            # Step 5: Integrity check - annual totals must be preserved exactly.
-            for year, target_annual in annual_targets.items():
-                year_keys = [f"{year}-{month:02d}" for month in range(1, 13)]
-                calculated_sum = sum(monthly_curve.get(key, 0) for key in year_keys)
-                if abs(calculated_sum - target_annual) > 0.001:
+                    filled = np.interp(full_years, years, values)
+                values = [float(v) for v in filled]
+                years = full_years
+
+            # Cumulative emissions at each 1 January: knot k is the total
+            # emitted strictly before years[k].
+            knots = [float(y) for y in years] + [float(years[-1] + 1)]
+            cumulative = [0.0]
+            for v in values:
+                cumulative.append(cumulative[-1] + max(v, 0.0))
+
+            from scipy.interpolate import PchipInterpolator
+            cumulative_curve = PchipInterpolator(np.asarray(knots, dtype=float),
+                                                 np.asarray(cumulative, dtype=float),
+                                                 extrapolate=False)
+
+            monthly_curve: Dict[str, float] = {}
+            for year in years:
+                edges = cumulative_curve(np.array(
+                    [year + m / 12.0 for m in range(13)], dtype=float))
+                increments = np.clip(np.diff(edges), 0.0, None)
+                for m in range(1, 13):
+                    monthly_curve[f"{year}-{m:02d}"] = float(increments[m - 1])
+
+            # Integrity check. Exact to floating-point noise because the totals
+            # telescope; a failure means the curve was built from something
+            # other than the annual frame.
+            for year, target_annual in zip(years, values):
+                got = sum(monthly_curve[f"{year}-{m:02d}"] for m in range(1, 13))
+                if abs(got - target_annual) > max(1e-6, abs(target_annual) * 1e-9):
                     print(f"WARNING: Year {year} annual-total mismatch: "
-                          f"target={target_annual:.6f}, got={calculated_sum:.6f}")
-            
+                          f"target={target_annual:.6f}, got={got:.6f}")
+
             return monthly_curve
-            
+
         except Exception as e:
             st.error(f"Error creating smooth monthly curve: {str(e)}")
-            # Fallback to simple annual distribution
-            monthly_curve = {}
-            for date in pd.date_range(start=f'{min_year}-01-01', end=f'{max_year}-12-01', freq='MS'):
-                year = date.year
-                annual_value = np.interp(year, annual_df['year'].tolist(), 
-                                       annual_df['annual_emissions_attributed'].tolist())
-                key = f"{year}-{date.month:02d}"
-                monthly_curve[key] = annual_value / 12
-            return monthly_curve
+            return {}

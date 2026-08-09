@@ -14,6 +14,7 @@ const state = {
   variants: ['legacy', 'current', 'drift'],
   data: null,
   reqId: 0,
+  showAnnual: true,
 };
 
 let meta = null;
@@ -42,6 +43,15 @@ export function initCompany(appMeta) {
     }
     loadCompany();
   });
+
+  const annualToggle = document.getElementById('toggle-annual');
+  if (annualToggle) {
+    annualToggle.addEventListener('change', () => {
+      state.showAnnual = annualToggle.checked;
+      // Redraw only; no refetch needed since the annual series is already loaded.
+      if (state.data) drawChart(state.data);
+    });
+  }
 
   const search = document.getElementById('company-search');
   const results = document.getElementById('company-results');
@@ -271,6 +281,37 @@ function drawChart(data) {
     });
   });
 
+  // Annual level overlay. The annual estimate is the primary model output;
+  // the monthly path is a disaggregation of it. Plotting the annual level as a
+  // step at annual/12 -- the average monthly rate for that year -- puts it on
+  // the same axis as the monthly curve, so the monthly line must average to the
+  // step across each calendar year. Solid where the year is reported carbon
+  // data, dotted where it is modelled.
+  if (state.showAnnual) {
+    present.forEach((v, i) => {
+      const colour = VARIANT_COLOUR[v] || PALETTE.navy;
+      const label = data.series[v].meta.label;
+      const byYear = new Map(data.series[v].annual.map((a) => [a.year, a]));
+      const level = (q) => base.map((p) => {
+        const a = byYear.get(p.year);
+        if (!a) return null;
+        return (a.quality === 'reported') === (q === 'reported') ? a.value / 12 : null;
+      });
+      datasets.push({
+        label: `${label} — annual level (reported)`,
+        data: level('reported'), borderColor: colour, backgroundColor: colour,
+        borderWidth: 1.25, pointRadius: 0, stepped: 'middle', tension: 0,
+        spanGaps: false, order: 20 - i,
+      });
+      datasets.push({
+        label: `${label} — annual level (modelled)`,
+        data: level('modelled'), borderColor: colour, backgroundColor: colour,
+        borderWidth: 1.25, borderDash: [2, 3], pointRadius: 0, stepped: 'middle',
+        tension: 0, spanGaps: false, order: 20 - i,
+      });
+    });
+  }
+
   const opts = baseOptions({
     yTitle: `tCO₂e attributed per month, on ${int(state.investment)} invested`,
     tickFormatter: compact,
@@ -297,6 +338,7 @@ function drawChart(data) {
   document.getElementById('company-legend').innerHTML = present.map((v) => `
     <span class="li"><span class="ln" style="border-top-color:${VARIANT_COLOUR[v]}"></span>${esc(data.series[v].meta.label)}</span>`).join('')
     + `<span class="li"><span class="ln dashed" style="border-top-color:${PALETTE.navy}"></span>Modelled years</span>`
+    + (state.showAnnual ? `<span class="li"><span class="ln" style="border-top-color:${PALETTE.navy};border-top-width:1px"></span>Annual level (÷12)</span>` : '')
     + (hasBand ? `<span class="li"><span class="bx" style="background:${hexA(VARIANT_COLOUR[focus], 0.24)}"></span>Interval, ${esc(data.series[focus].meta.label)}</span>` : '');
 
   const nowcastYears = `${meta.nowcast_from}\u2013${data.headline[focus] ? data.headline[focus].final_year : ''}`;
@@ -320,12 +362,38 @@ function drawChart(data) {
     + (agree
       ? ` Over the reported span the variants differ by at most ${pct(maxRel * 100)}, so they plot on top of one another; they diverge only where the data ends.`
       : '');
+  // Reconciliation: the monthly path is a disaggregation of the annual
+  // estimate, so each calendar year's twelve months must sum to the annual
+  // total. Check it in the browser rather than asserting it.
+  let worstRel = 0;
+  present.forEach((v) => {
+    const sums = new Map();
+    data.series[v].monthly.forEach((p) => {
+      sums.set(p.year, (sums.get(p.year) || 0) + p.value);
+    });
+    data.series[v].annual.forEach((a) => {
+      const got = sums.get(a.year);
+      if (got === undefined || !a.value) return;
+      worstRel = Math.max(worstRel, Math.abs(got - a.value) / Math.abs(a.value));
+    });
+  });
+  const reconcile = worstRel < 1e-6
+    ? `<b>Annual reconciliation:</b> each calendar year's twelve monthly values sum to that year's annual estimate exactly (largest discrepancy ${(worstRel * 100).toExponential(1)}%). `
+    : `<b class="warn">Annual reconciliation FAILED:</b> largest discrepancy ${pct(worstRel * 100)} between the sum of monthly values and the annual estimate. `;
+
   document.getElementById('company-caption').innerHTML =
-    `Shaded band is the model's interval for <b>${esc(data.series[focus].meta.label)}</b> and is approximately a 50% interval — `
-    + `roughly half of outcomes would be expected to fall outside it, so it is not a worst case. `
-    + `The monthly path is interpolated between annual points and carries no information beyond them. `
-    + `Values are tCO₂e attributed to ${int(state.investment)} invested, using an enterprise-value denominator, so a change in `
-    + `enterprise value moves the series without any change in company emissions.`;
+    `<b>Annual first, then monthly.</b> The annual level is the model's actual output. The monthly path is a `
+    + `mean-preserving disaggregation of it: cumulative emissions are interpolated with a monotone curve and each `
+    + `month is that curve's increment, so annual totals hold by construction and the path has no step at year `
+    + `boundaries. The stepped line is the annual level shown as an average monthly rate (annual ÷ 12) — solid where `
+    + `the year is reported carbon data, dotted where it is modelled. `
+    + reconcile
+    + `The monthly shape carries no information beyond the annual points; month-to-month movement is a smoothing `
+    + `convention, not data. `
+    + `Shaded band is the model's interval for <b>${esc(data.series[focus].meta.label)}</b> and is approximately a 50% `
+    + `interval — roughly half of outcomes would be expected to fall outside it, so it is not a worst case. `
+    + `Values are tCO₂e attributed to ${int(state.investment)} invested, using an enterprise-value denominator, so a `
+    + `change in enterprise value moves the series without any change in company emissions.`;
 }
 
 function hexA(hex, a) {

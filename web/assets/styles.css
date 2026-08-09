@@ -270,3 +270,16 @@ fieldset.field{border:0;margin:0;padding:0}
 }
 .empty .quick:hover{border-color:var(--cerulean);color:var(--cerulean)}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Annual-level toggle in the chart header */
+.chart-controls { display: flex; align-items: center; gap: 16px; margin: 0 0 8px; }
+.chart-controls .chk {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--muted, #666666); cursor: pointer;
+  user-select: none;
+}
+.chart-controls .chk input { accent-color: #00A3D7; width: 13px; height: 13px; cursor: pointer; }
+.chart-controls .chk:hover { color: #002A5C; }
+.chart-controls .chk input:focus-visible { outline: 2px solid #00A3D7; outline-offset: 2px; }
+.chart-legend .ln[style*="border-top-width:1px"] { opacity: 0.85; }
+b.warn { color: #C0392B; }
