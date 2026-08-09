@@ -348,6 +348,8 @@ def estimate_intensity_series(
         target_years: Sequence[int],
         jump_threshold_log: float = DEFAULT_JUMP_LOG,
         sector_log_growth: Optional[float] = None,
+        cap_mode: str = "anchor",
+        drift_offset: float = 0.0,
 ) -> Dict[int, IntensityEstimate]:
     """Estimate intensity for every target year from reported points.
 
@@ -355,7 +357,20 @@ def estimate_intensity_series(
       * spike removal (Category C) before any fitting,
       * log-space PCHIP for interior gaps (and spike-filled years),
       * regime-split + shrinkage-toward-sector for forward extrapolation,
-      * adaptive median cap on every estimate.
+      * sanity cap on every estimate.
+
+    Parameters
+    ----------
+    cap_mode : {"anchor", "median"}
+        How forward extrapolations are capped. "anchor" (default, current)
+        caps around the last observed value; "median" reproduces the legacy
+        behaviour of capping around the retained regime median. Exposed so the
+        dashboard can show the two side by side -- see api/variants.py.
+    drift_offset : float
+        Additional downward log-drift per year of horizon applied to forward
+        extrapolations only. 0.0 disables it. Intensities fall ~4.5%/yr in the
+        median, which the estimator does not otherwise encode, so forecasts
+        run high; see BM sector-drift debiased in backtest_methodology.py.
     """
     out: Dict[int, IntensityEstimate] = {}
     years = sorted(reported)
@@ -418,7 +433,12 @@ def estimate_intensity_series(
             # is not clamped back upward. See cap_to_anchor.
             anchor = float(extrap_vals[-1]) if len(extrap_vals) else extrap_median
             steps = int(ty - extrap_years[-1]) if len(extrap_years) else horizon
-            est = cap_to_anchor(est, anchor, steps)
+            if drift_offset:
+                est = float(est * np.exp(-abs(drift_offset) * max(steps, 0)))
+            if cap_mode == "median":
+                est = cap_to_median(est, extrap_median, is_extrapolation=True)
+            else:
+                est = cap_to_anchor(est, anchor, steps)
 
         if est is None:
             continue

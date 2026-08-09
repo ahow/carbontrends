@@ -115,7 +115,9 @@ class CarbonCalculator:
                 'country': 'N/A'
             }
     
-    def calculate_attribution(self, company_name: str, investment_amount: float) -> Optional[pd.DataFrame]:
+    def calculate_attribution(self, company_name: str, investment_amount: float,
+                              cap_mode: str = "anchor", drift_offset: float = 0.0,
+                              sales_mode: str = "latest") -> Optional[pd.DataFrame]:
         """
         Calculate carbon attribution for a company investment over time.
         
@@ -205,6 +207,8 @@ class CarbonCalculator:
                 reported, target_years,
                 jump_threshold_log=jump_threshold,
                 sector_log_growth=sector_log_growth,
+                cap_mode=cap_mode,
+                drift_offset=drift_offset,
             )
 
             # Most recent ACTUAL sales, used to hold revenue flat for any year
@@ -221,8 +225,13 @@ class CarbonCalculator:
             # to fall while revenue was frozen, overstating decarbonisation.
             #
             # Iterate over every year with a positive sales figure instead.
+            # sales_mode="latest" (current) reads the most recent year with a
+            # positive sales figure. sales_mode="joint" reproduces the legacy
+            # behaviour of only considering years that also have carbon data,
+            # which discarded the two most recent years of revenue actuals.
             last_sales = None
-            for y in sorted(intensity_data):
+            _sales_years = sorted(reported) if sales_mode == "joint" else sorted(intensity_data)
+            for y in _sales_years:
                 sv = intensity_data[y].get('sales')
                 if sv and sv > 0:
                     last_sales = sv

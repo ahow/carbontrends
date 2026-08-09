@@ -1,0 +1,11 @@
+.git
+__pycache__
+*.pyc
+attached_assets
+carbon_dashboard_code.zip
+debug_*.py
+analyze_*.py
+app_backup.py
+data_processor_old.py
+fix_lsp_errors.py
+.agents
